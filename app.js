@@ -1,6 +1,9 @@
-/* ===== صيدلية الياس — نقطة بيع مدعومة بالذكاء الاصطناعي ===== */
+/* ===== ترياق · نظام إدارة الصيدلية — نقطة بيع ومخزون بمساعدة الذكاء الاصطناعي ===== */
+const BRAND = "ترياق";
 
 const $ = id => document.getElementById(id);
+/* تأخير بسيط لبحث القوائم الطويلة: يمنع تعليق الكتابة على الأجهزة الضعيفة */
+const debounce = (fn, ms) => { let t; return function () { clearTimeout(t); t = setTimeout(fn, ms || 90); }; };
 const money = n => (Number(n) || 0).toLocaleString("en-US");
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const DATE_RE = /(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{4})/;
@@ -49,7 +52,7 @@ let AWH      = LS.get("ph.awh", "المخزن الرئيسي");
 let USERS    = LS.get("ph.users", []);              /* {n,pin,role} */
 let ME       = null;
 let PLANS    = LS.get("ph.plans", []);              /* أقساط */      /* {n, phone, bal, log:[{at,amt,note}]} */
-let CFG      = LS.get("ph.cfg", { shop: "PHARMA — صيدلية الياس", cur: "د.ع", margin: 25, expdays: 90,
+let CFG      = LS.get("ph.cfg", { shop: "", cur: "د.ع", margin: 25, expdays: 90,
                                   key: "", model: "claude-sonnet-4-5", safet: 0, safeb: 0 });
 let SEQ      = LS.get("ph.seq", 0);
 let ITEMS = [], CART = [], DISC = 0, PAYM = "نقد", PICK = null;
@@ -222,6 +225,7 @@ function show(it) {
   else if (d !== null && d < (CFG.expdays || 90)) { f.textContent = "قريب الانتهاء — يتبقى " + d + " يوماً"; f.className = "flag warn on"; }
   else if (!it.q) { f.textContent = "غير متوفر في المخزون"; f.className = "flag warn on"; }
   else if (it.k && it.p && it.p < it.k) { f.textContent = "سعر البيع أقل من الكلفة"; f.className = "flag warn on"; }
+  drawAlts(it);
   $("card").classList.add("on");
   $("sug").classList.remove("on");
 }
@@ -799,17 +803,67 @@ function renderAlerts() {
     sec("البيع أقل من الكلفة (" + loss.length + ")", rows(loss, it => money(it.p) + " < " + money(it.k)));
 }
 
-/* ---------- الذكاء الاصطناعي ---------- */
+/* ---------- الذكاء الاصطناعي: عبر خادم الاشتراك أو بمفتاح خاص ---------- */
+/* ضع هنا رابط الـWorker قبل توليد الـAPK فلا يحتاج الزبون غير كود الاشتراك */
+const AI_URL_DEFAULT = "";
+const AI_SYS = "أنت مساعد صيدلاني في العراق. أجب بالعربية باختصار ودقة، ونبّه إلى ما يستدعي مراجعة الطبيب.";
+let AIQ = LS.get("ph.aiq", null);          /* آخر حالة اشتراك معروفة */
+
+function deviceId() {
+  let d = LS.get("ph.dev", "");
+  if (!d) { d = "d" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); LS.set("ph.dev", d); }
+  return d;
+}
+const aiURL  = () => String(CFG.aiurl || AI_URL_DEFAULT || "").replace(/\/+$/, "");
+const aiMode = () => (aiURL() && CFG.lic) ? "lic" : (CFG.key ? "key" : "none");
+
+async function aiPost(path, body) {
+  const res = await fetch(aiURL() + path, { method: "POST",
+    headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  let d = {}; try { d = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(d.error || ("تعذّر الاتصال بخادم الاشتراك (" + res.status + ")"));
+  return d;
+}
+function setQuota(d) {
+  if (d && d.left != null) { AIQ = { until: d.until || (AIQ && AIQ.until), left: d.left,
+                                     quota: d.quota || (AIQ && AIQ.quota), at: Date.now() };
+                             LS.set("ph.aiq", AIQ); drawQuota(); }
+}
+function drawQuota() {
+  const el = $("licmsg"); if (!el) return;
+  if (aiMode() === "key") { el.textContent = "يعمل بمفتاح خاص (وضع المطوّر)"; return; }
+  if (!AIQ) { el.textContent = CFG.lic ? "لم يُفعَّل بعد — اضغط تفعيل" : "غير مفعّل"; return; }
+  el.textContent = "مفعّل ✓" + (AIQ.until ? " حتى " + AIQ.until : "") +
+                   (AIQ.left != null ? " · المتبقي هذا الشهر: " + AIQ.left + " طلب" : "");
+}
+async function activateLic() {
+  const code = ($("cfg-lic").value || "").trim().toUpperCase();
+  const url  = ($("cfg-aiurl").value || "").trim() || AI_URL_DEFAULT;
+  if (!code) return toast("أدخل كود الاشتراك");
+  if (!url)  return toast("أدخل رابط خادم الاشتراك");
+  CFG.lic = code; CFG.aiurl = url; LS.set("ph.cfg", CFG);
+  $("licmsg").textContent = "جارٍ التفعيل…";
+  try {
+    const d = await aiPost("/activate", { code, device: deviceId(), shop: CFG.shop });
+    setQuota(d); drawQuota(); toast("تم تفعيل الاشتراك");
+  } catch (e) { $("licmsg").textContent = e.message; }
+}
 async function ai(prompt, sys, maxTok) {
-  if (!CFG.key) { go("cfg"); throw new Error("أدخل مفتاح API في الإعدادات أولاً"); }
+  const mode = aiMode();
+  if (mode === "none") { go("cfg"); throw new Error("فعّل الاشتراك من الإعدادات لتشغيل المساعد الذكي"); }
+  if (mode === "lic") {
+    const d = await aiPost("/ai", { code: CFG.lic, device: deviceId(), prompt: prompt,
+                                    system: sys || AI_SYS, max_tokens: maxTok || 800 });
+    setQuota(d);
+    return d.text || "";
+  }
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": CFG.key,
                "anthropic-version": "2023-06-01",
                "anthropic-dangerous-direct-browser-access": "true" },
     body: JSON.stringify({ model: CFG.model || "claude-sonnet-4-5", max_tokens: maxTok || 800,
-      system: sys || "أنت مساعد صيدلاني في العراق. أجب بالعربية باختصار ودقة، ونبّه إلى ما يستدعي مراجعة الطبيب.",
-      messages: [{ role: "user", content: prompt }] })
+      system: sys || AI_SYS, messages: [{ role: "user", content: prompt }] })
   });
   if (!res.ok) throw new Error("خطأ " + res.status + " — تحقق من المفتاح أو الاتصال");
   const d = await res.json();
@@ -852,6 +906,177 @@ async function aiBatch() {
     renderStock();
   } catch (e) { aiOut(e.message); }
 }
+/* ---------- نافذة عرض عامة ---------- */
+function info(title, html) {
+  $("infotitle").textContent = title;
+  $("infobody").innerHTML = html;
+  $("infowin").classList.add("on");
+}
+const aiWait = '<p class="muted">جارٍ التحليل بالذكاء الاصطناعي…</p>';
+
+/* ---------- بدائل بنفس المادة الفعالة (فوري، بلا إنترنت) ---------- */
+function altsFor(it) {
+  const sc = String(it.sc || "").trim().toLowerCase();
+  if (!sc) return [];
+  return ITEMS.filter(x => x.id !== it.id && (x.q || 0) > 0 &&
+                           String(x.sc || "").trim().toLowerCase() === sc)
+              .sort((a, b) => (a.p || 0) - (b.p || 0)).slice(0, 6);
+}
+function drawAlts(it) {
+  const box = $("c-alt"); if (!box) return;
+  const a = altsFor(it);
+  if (!a.length) { box.innerHTML = ""; box.classList.remove("on"); return; }
+  box.innerHTML = '<i>بدائل متوفرة بنفس المادة الفعالة</i>' +
+    a.map(x => '<div class="row" data-id="' + x.id + '"><span>' + esc(x.n) + '</span>' +
+      '<b>' + money(x.p) + " " + esc(CFG.cur) + ' · ' + money(x.q) + '</b></div>').join("");
+  box.classList.add("on");
+}
+
+/* ---------- الطلبية الذكية ---------- */
+let ORDER = [];
+function soldMap(days) {
+  const from = Date.now() - days * 86400000, m = {};
+  INVOICES.forEach(v => {
+    if (v.kind === "مرتجع" || new Date(v.at).getTime() < from) return;
+    (v.lines || []).forEach(l => { const k = l.id || l.n; m[k] = (m[k] || 0) + (l.q || 0); });
+  });
+  return m;
+}
+function orderRows(cover) {
+  cover = cover || Number(CFG.cover) || 30;
+  const sold = soldMap(30), out = [];
+  ITEMS.forEach(it => {
+    const s = sold[it.id] || sold[it.n] || 0;
+    if (!s && !(it.q > 0)) return;                       /* أصناف لا تتعامل بها الصيدلية */
+    const rate = s / 30;
+    const need = Math.ceil(rate * cover) - (it.q || 0);
+    const low  = (it.q || 0) <= (it.min || 5);
+    const qty  = Math.max(need > 0 ? need : 0, low ? Math.max(0, (it.min || 5) - (it.q || 0)) : 0);
+    if (qty <= 0) return;
+    out.push({ it: it, sold: s, qty: qty, cost: (it.k || 0) * qty,
+               days: rate > 0 ? Math.floor((it.q || 0) / rate) : null });
+  });
+  return out.sort((a, b) => (b.sold - a.sold) || (b.cost - a.cost));
+}
+function renderOrder() {
+  ORDER = orderRows();
+  if (!ORDER.length) return info("الطلبية المقترحة",
+    '<p class="muted">لا يوجد ما يستدعي الطلب الآن — لا أصناف تحت الحد ولا نفاد متوقع خلال ' +
+    (Number(CFG.cover) || 30) + ' يوماً.</p>');
+  const by = {};
+  ORDER.forEach(r => { const k = r.it.sup || "غير محدد"; (by[k] = by[k] || []).push(r); });
+  const total = ORDER.reduce((a, r) => a + r.cost, 0);
+  const html =
+    '<p class="muted">مبنية على مبيعات آخر ٣٠ يوماً وتغطية ' + (Number(CFG.cover) || 30) +
+    ' يوماً والحد الأدنى لكل صنف.</p>' +
+    Object.keys(by).map(sup =>
+      '<h4 style="margin:12px 0 6px">' + esc(sup) + ' <small class="muted">(' + by[sup].length + ' صنف)</small></h4>' +
+      '<table class="tbl"><thead><tr><th>الصنف</th><th>المتوفر</th><th>بيع ٣٠ يوم</th><th>يكفي</th><th>الطلب</th><th>الكلفة</th></tr></thead><tbody>' +
+      by[sup].map(r => '<tr><td>' + esc(r.it.n) + '</td><td>' + money(r.it.q || 0) + '</td><td>' + money(r.sold) +
+        '</td><td>' + (r.days === null ? "—" : r.days + " يوم") + '</td><td><b>' + money(r.qty) +
+        '</b></td><td>' + (r.cost ? money(r.cost) : "—") + '</td></tr>').join("") +
+      '</tbody></table>').join("") +
+    '<h3 style="margin-top:12px">الكلفة التقديرية: ' + money(total) + " " + esc(CFG.cur) + '</h3>' +
+    '<div class="btns"><button class="main" id="ord-xls">تصدير Excel</button>' +
+    '<button id="ord-copy">نسخ النص</button>' +
+    '<button id="ord-ai" class="dark">ترتيب بالأولوية (AI)</button></div>' +
+    '<div id="ord-ai-out"></div>';
+  info("الطلبية المقترحة", html);
+  $("ord-xls").onclick  = orderXLSX;
+  $("ord-copy").onclick = () => {
+    const t = orderText();
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => toast("نُسخت الطلبية")).catch(() => toast("تعذّر النسخ"));
+  };
+  $("ord-ai").onclick = orderAI;
+}
+function orderText() {
+  const by = {};
+  ORDER.forEach(r => { const k = r.it.sup || "غير محدد"; (by[k] = by[k] || []).push(r); });
+  return "طلبية " + CFG.shop + " — " + new Date().toLocaleDateString("en-GB") + "\n" +
+    Object.keys(by).map(sup => sup + ":\n" +
+      by[sup].map(r => "• " + r.it.n + " × " + r.qty).join("\n")).join("\n\n");
+}
+async function orderXLSX() {
+  if (!await ensureXLSX()) return;
+  const rows = [["الصنف", "الباركود", "المذخر", "المتوفر", "بيع ٣٠ يوم", "الكمية المطلوبة", "الكلفة التقديرية"]];
+  ORDER.forEach(r => rows.push([r.it.n, r.it.b || "", r.it.sup || "", r.it.q || 0, r.sold, r.qty, r.cost]));
+  rows.push([]); rows.push(["الإجمالي", "", "", "", "", "", ORDER.reduce((a, r) => a + r.cost, 0)]);
+  const wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+  XLSX.utils.book_append_sheet(wb, sheetFrom(rows), "الطلبية");
+  saveWorkbook(wb, "order-" + new Date().toISOString().slice(0, 10) + ".xlsx");
+}
+async function orderAI() {
+  const out = $("ord-ai-out"); out.innerHTML = aiWait;
+  const list = ORDER.slice(0, 40).map(r =>
+    r.it.n + " | متوفر " + (r.it.q || 0) + " | بيع30 " + r.sold + " | مقترح " + r.qty +
+    " | كلفة " + r.cost).join("\n");
+  try {
+    const t = await ai("هذه طلبية شراء مقترحة لصيدلية. رتّبها بثلاث مجموعات: (عاجل الآن) و(هذا الأسبوع) و(يمكن تأجيله)، " +
+      "واذكر سطراً واحداً لكل مجموعة يبرّر السبب، ثم اقترح كيف يقلّل الصيدلي الكلفة دون نفاد. بلا مقدمات.\n" + list,
+      "أنت مستشار إدارة مخزون صيدليات. أجب بالعربية بنقاط قصيرة.", 900);
+    out.innerHTML = '<div class="out on">' + esc(t) + '</div>';
+  } catch (e) { out.innerHTML = '<p class="bad">' + esc(e.message) + '</p>'; }
+}
+
+/* ---------- فحص الفاتورة قبل البيع ---------- */
+function cartDupes() {
+  const by = {};
+  CART.forEach(l => {
+    const it = ITEMS.find(x => x.id === l.id);
+    const sc = String((it && it.sc) || "").trim().toLowerCase();
+    if (!sc) return; (by[sc] = by[sc] || []).push(l.n);
+  });
+  return Object.keys(by).filter(k => by[k].length > 1).map(k => ({ sc: k, names: by[k] }));
+}
+async function cartCheck() {
+  if (!CART.length) return toast("الفاتورة فارغة");
+  const dup = cartDupes();
+  const head = dup.length
+    ? '<div class="flag warn on">ازدواج بالمادة الفعالة: ' +
+      dup.map(d => esc(d.sc) + " (" + d.names.map(esc).join(" + ") + ")").join(" · ") + '</div>'
+    : '<p class="muted">لا يوجد ازدواج في المادة الفعالة.</p>';
+  info("فحص الفاتورة", head + aiWait);
+  const list = CART.map(l => {
+    const it = ITEMS.find(x => x.id === l.id);
+    return "- " + l.n + (it && it.sc ? " (" + it.sc + ")" : "");
+  }).join("\n");
+  try {
+    const t = await ai("أدوية تُصرف معاً لمريض واحد. اذكر باختصار: التداخلات المهمة سريرياً، الازدواج العلاجي، " +
+      "وما يستوجب مراجعة الطبيب. إن لم يوجد شيء مهم فاكتب: لا توجد تداخلات مهمة.\n" + list,
+      "أنت صيدلاني سريري دقيق. أجب بالعربية بنقاط قصيرة ولا تخمّن.", 700);
+    info("فحص الفاتورة", head + '<div class="out on">' + esc(t) + '</div>' +
+         '<p class="muted">إرشادي ولا يغني عن المصادر الدوائية المعتمدة ورأي الطبيب.</p>');
+  } catch (e) { info("فحص الفاتورة", head + '<p class="bad">' + esc(e.message) + '</p>'); }
+}
+
+/* ---------- تحليل أداء الصيدلية ---------- */
+async function aiInsights() {
+  info("تحليل الأداء", aiWait);
+  const sold = soldMap(30);
+  const top = Object.keys(sold).sort((a, b) => sold[b] - sold[a]).slice(0, 15);
+  const inv30 = INVOICES.filter(v => new Date(v.at).getTime() > Date.now() - 30 * 86400000);
+  const rev = inv30.reduce((a, v) => a + (v.total || 0), 0);
+  const dead = ITEMS.filter(it => (it.q || 0) > 0 && !sold[it.id] && !sold[it.n]);
+  const deadVal = dead.reduce((a, it) => a + (it.k || 0) * (it.q || 0), 0);
+  const soon = ITEMS.filter(it => { const d = expDays(nearestExp(it)); return d !== null && d >= 0 && d < 120 && (it.q || 0) > 0; });
+  const q = "أرقام صيدلية خلال ٣٠ يوماً:\n" +
+    "- عدد الفواتير: " + inv30.length + "\n- المبيعات: " + rev + " " + CFG.cur +
+    "\n- متوسط الفاتورة: " + (inv30.length ? Math.round(rev / inv30.length) : 0) +
+    "\n- أصناف راكدة (متوفرة ولم تُبع): " + dead.length + " بكلفة " + deadVal +
+    "\n- أصناف تنتهي خلال ١٢٠ يوماً: " + soon.length +
+    "\n- الأكثر مبيعاً: " + top.map(k => { const it = ITEMS.find(x => x.id === k); return (it ? it.n : k) + "×" + sold[k]; }).join("، ") +
+    "\nأعطني ٥ ملاحظات عملية قابلة للتنفيذ هذا الأسبوع لزيادة الربح وتقليل الخسارة، بلا مقدمات.";
+  try {
+    const t = await ai(q, "أنت مستشار إدارة صيدليات في العراق. أجب بالعربية بخمس نقاط قصيرة ومحددة.", 900);
+    info("تحليل الأداء",
+      '<div class="kv"><div><i>فواتير ٣٠ يوم</i>' + money(inv30.length) + '</div>' +
+      '<div><i>المبيعات</i>' + money(rev) + " " + esc(CFG.cur) + '</div>' +
+      '<div><i>أصناف راكدة</i>' + money(dead.length) + '</div>' +
+      '<div><i>كلفة الراكد</i>' + money(deadVal) + '</div></div>' +
+      '<div class="out on">' + esc(t) + '</div>');
+  } catch (e) { info("تحليل الأداء", '<p class="bad">' + esc(e.message) + '</p>'); }
+}
+
 function suggestPrice() {
   const k = Number($("e-k").value) || 0;
   if (!k) return toast("أدخل الكلفة أولاً");
@@ -1051,11 +1276,18 @@ function saveFile(name, text, mime) {
 }
 /* النسخة الاحتياطية = كل شيء: المخزون والفواتير والديون والأقساط والمخازن والموظفون */
 function backupData() {
-  return Object.assign(syncPayload(), { app: "PHARMA", v: 3, cfg: CFG, awh: AWH, seq: SEQ });
+  return Object.assign(syncPayload(), { app: "TIRYAQ", v: 3, cfg: CFG, awh: AWH, seq: SEQ });
 }
 function backup() {
-  saveFile("elyas-backup-" + new Date().toISOString().slice(0, 10) + ".json",
+  saveFile("tiryaq-backup-" + new Date().toISOString().slice(0, 10) + ".json",
            JSON.stringify(backupData()), "application/json");
+}
+function askShop() {
+  const v = (prompt("مرحباً بك في " + BRAND + "\nاسم صيدليتك كما تريده أن يظهر على الوصولات والتقارير:", "") || "").trim();
+  CFG.shop = v || "صيدليتي";
+  LS.set("ph.cfg", CFG);
+  $("shopname").textContent = CFG.shop;
+  const f = $("cfg-shop"); if (f) f.value = CFG.shop;
 }
 function refreshAll() {
   buildItems(); renderHome(); renderStock(); renderPurch(); renderCust();
@@ -1128,10 +1360,14 @@ function init() {
     const gb = document.querySelector('.nav button[data-t=guide]'); if (gb) gb.style.display = "none";
   }
   applySafe();
-  $("shopname").textContent = CFG.shop;
+  $("shopname").textContent = CFG.shop || BRAND;
+  if (!CFG.shop) setTimeout(askShop, 900);          /* أول تشغيل: اسم الصيدلية يُطبع على كل وصل */
   $("cfg-shop").value = CFG.shop; $("cfg-cur").value = CFG.cur;
   $("cfg-margin").value = CFG.margin; $("cfg-expdays").value = CFG.expdays;
   $("cfg-key").value = CFG.key; $("cfg-model").value = CFG.model;
+  $("cfg-lic").value = CFG.lic || ""; $("cfg-aiurl").value = CFG.aiurl || AI_URL_DEFAULT;
+  $("cfg-cover").value = CFG.cover || 30;
+  drawQuota();
   $("cfg-safet").value = CFG.safet || 0; $("cfg-safeb").value = CFG.safeb || 0;
   $("cfg-scan").value = CFG.scan || "balanced";
   $("cfg-upstep").value = CFG.upstep || 250;
@@ -1319,7 +1555,7 @@ function init() {
   
 
   /* المخزون */
-  $("ssearch").addEventListener("input", () => { SPAGE = 50; renderStock(); });
+  $("ssearch").addEventListener("input", debounce(() => { SPAGE = 50; renderStock(); }, 110));
   document.querySelectorAll("#pg-stock .chip").forEach(c => c.onclick = () => {
     document.querySelectorAll("#pg-stock .chip").forEach(x => x.classList.remove("on"));
     c.classList.add("on"); SFILTER = c.dataset.s; SPAGE = 50; renderStock();
@@ -1376,7 +1612,7 @@ function init() {
 
   /* دليل الأسعار */
   buildGuide();
-  $("gsearch").addEventListener("input", renderGuide);
+  $("gsearch").addEventListener("input", debounce(renderGuide, 130));
   $("glist").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     const g = GUIDE[+b.closest(".tk").dataset.i]; if (!g) return;
@@ -1395,7 +1631,7 @@ function init() {
   });
 
   /* الديون */
-  $("dsearch").addEventListener("input", renderDebt);
+  $("dsearch").addEventListener("input", debounce(renderDebt, 90));
   document.querySelectorAll("#pg-debt .chip").forEach(c => c.onclick = () => {
     document.querySelectorAll("#pg-debt .chip").forEach(x => x.classList.remove("on"));
     c.classList.add("on"); DFILTER = c.dataset.d; renderDebt();
@@ -1528,6 +1764,15 @@ function init() {
   $("aiask").onclick = askAI;
   $("aisci").onclick = aiSci;
   $("aibatch").onclick = aiBatch;
+  $("orderbtn").onclick   = renderOrder;
+  $("insightbtn").onclick = aiInsights;
+  $("cartcheck").onclick  = cartCheck;
+  $("licsave").onclick    = activateLic;
+  $("c-alt").addEventListener("click", e => {
+    const r = e.target.closest(".row"); if (!r) return;
+    const it = ITEMS.find(x => x.id === r.dataset.id); if (it) { $("q").value = it.n; show(it); }
+  });
+  drawQuota();
   $("savecfg").onclick = () => {
     CFG = { shop: $("cfg-shop").value.trim() || "صيدليتي", cur: $("cfg-cur").value.trim() || "د.ع",
             margin: Number($("cfg-margin").value) || 25, expdays: Number($("cfg-expdays").value) || 90,
@@ -1537,8 +1782,11 @@ function init() {
             safet: Number($("cfg-safet").value) || 0, safeb: Number($("cfg-safeb").value) || 0,
             scan: $("cfg-scan").value, upstep: Number($("cfg-upstep").value) || 250,
             round: Number($("cfg-round").value) || 0, hidecost: $("cfg-hidecost").checked,
-            syncurl: $("cfg-syncurl").value.trim(), synckey: $("cfg-synckey").value.trim() };
-    LS.set("ph.cfg", CFG); applySafe(); $("shopname").textContent = CFG.shop; renderHome(); toast("حُفظت الإعدادات");
+            syncurl: $("cfg-syncurl").value.trim(), synckey: $("cfg-synckey").value.trim(),
+            lic: ($("cfg-lic").value || "").trim().toUpperCase(),
+            aiurl: ($("cfg-aiurl").value || "").trim(),
+            cover: Number($("cfg-cover").value) || 30 };
+    LS.set("ph.cfg", CFG); applySafe(); $("shopname").textContent = CFG.shop || BRAND; renderHome(); toast("حُفظت الإعدادات");
   };
   $("backup").onclick = backup;
   try {

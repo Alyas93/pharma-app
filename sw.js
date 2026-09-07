@@ -1,4 +1,4 @@
-const CACHE = "pharma-v5";
+const CACHE = "tiryaq-v1";
 const CORE = ["./", "./index.html", "./app.js", "./manifest.json",
               "./data/seed.js", "./data/prices.js",
               "./vendor/zxing.min.js", "./vendor/fflate.min.js",

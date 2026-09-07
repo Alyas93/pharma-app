@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="color-scheme" content="light">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>PHARMA — نظام الصيدلية</title>
+<title>ترياق · نظام إدارة الصيدلية</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0d2136">
 <meta name="mobile-web-app-capable" content="yes">
@@ -233,6 +233,36 @@
   }
   @media print{ body>*{display:none!important} #receipt{display:block!important;position:static;background:#fff}
                 #receipt .sheet{box-shadow:none;max-width:100%} #rcx,#rcprint{display:none!important} }
+  /* بطاقة البدائل */
+  .alt{display:none;margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  .alt.on{display:block}
+  .alt i{font-style:normal;font-size:.74rem;color:var(--muted);display:block;margin-bottom:6px}
+  .alt .row{display:flex;justify-content:space-between;gap:10px;align-items:center;
+            padding:9px 11px;border:1px solid var(--line);border-radius:12px;margin-bottom:6px;
+            background:var(--paper);cursor:pointer;font-size:.85rem}
+  .alt .row:active{transform:scale(.99)}
+  .alt .row b{white-space:nowrap;color:var(--brand)}
+
+  /* لوحة مميّزة */
+  .panel.pro{border-color:var(--accent);
+             background:linear-gradient(180deg,var(--soft),var(--card) 62%)}
+  .panel.pro h4{color:var(--brand)}
+
+  /* شاشة الإقلاع — تُخفي وميض الصفحة أثناء تحميل البيانات */
+  #boot{position:fixed;inset:0;z-index:99;background:var(--brand);color:#fff;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+        transition:opacity .35s ease}
+  #boot.off{opacity:0;pointer-events:none}
+  #boot .mark{width:76px;height:76px;border-radius:24px;display:flex;align-items:center;justify-content:center;
+              font-size:2rem;font-weight:800;color:#06242b;
+              background:linear-gradient(135deg,var(--accent),var(--accent2));
+              box-shadow:0 18px 40px rgba(34,201,214,.35)}
+  #boot small{opacity:.75;font-size:.78rem;letter-spacing:.04em}
+  #boot .bar{width:150px;height:3px;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden}
+  #boot .bar i{display:block;height:100%;width:40%;background:var(--accent);
+               animation:bootbar 1.05s ease-in-out infinite}
+  @keyframes bootbar{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
+
   /* شريط المشاركة: بديل التنزيل داخل تطبيق APK */
   .sharebar{display:none;position:fixed;left:0;right:0;bottom:calc(84px + var(--safeb));
             z-index:30;padding:0 12px;gap:8px;justify-content:center;align-items:center}
@@ -246,7 +276,7 @@
 <header>
   <div class="brand">
     <span class="logo">℞</span>
-    <div><b id="shopname">PHARMA</b><span class="clock" id="clock"></span></div>
+    <div><b id="shopname">ترياق</b><span class="clock" id="clock"></span></div>
   </div>
   <span class="clock" id="whoami"></span>
   <button id="lockbtn" class="ghost">قفل</button>
@@ -282,6 +312,7 @@
     <div class="big"><span id="c-price"></span><em>سعر البيع</em></div>
     <div class="kv" id="c-kv"></div>
     <div class="flag" id="c-flag"></div>
+    <div class="alt" id="c-alt"></div>
     <div class="btns">
       <button class="main" id="addcart">إضافة للفاتورة</button>
       <button id="editItem">تعديل</button>
@@ -320,6 +351,15 @@
     <div class="lst" id="topsell"><p class="muted">لا توجد مبيعات بعد.</p></div>
   </div>
 
+  <div class="panel pro">
+    <h4>الإدارة الذكية</h4>
+    <p class="muted">طلبية مبنية على بيعك الحقيقي، وتحليل يقول لك أين يضيع الربح.</p>
+    <div class="btns">
+      <button class="main" id="orderbtn">الطلبية المقترحة</button>
+      <button class="dark" id="insightbtn">تحليل الأداء (AI)</button>
+    </div>
+  </div>
+
   <div class="panel">
     <h4>المساعد الدوائي</h4>
     <div class="field"><input id="aiq" placeholder="مثال: بدائل هذا الدواء، الجرعة، التداخلات"></div>
@@ -349,6 +389,7 @@
     <div class="words" id="words"></div>
     <div class="btns">
       <button class="main" id="pay">دفع</button>
+      <button id="cartcheck" class="dark">فحص الفاتورة</button>
       <button id="hold">تعليق</button>
       <button id="clearcart">إلغاء</button>
       <button id="shiftbtn">الوردية</button>
@@ -487,7 +528,17 @@
     <div class="field"><label>رمز القفل PIN (اتركه فارغاً لتعطيله)</label><input id="cfg-pin" inputmode="numeric"></div>
     <div class="field"><label>قفل تلقائي بعد (دقيقة، 0 = بلا)</label><input id="cfg-lockmin" inputmode="numeric"></div>
   </div>
-  <div class="field"><label>مفتاح Anthropic API</label><input id="cfg-key" placeholder="sk-ant-..."></div>
+  <div class="panel pro" style="margin:14px 0">
+    <h4>الاشتراك والذكاء الاصطناعي</h4>
+    <div class="field"><label>كود الاشتراك</label>
+      <input id="cfg-lic" placeholder="TRQ-XXXX-XXXX-XXXX" style="letter-spacing:.06em"></div>
+    <div class="field"><label>رابط خادم الاشتراك</label>
+      <input id="cfg-aiurl" placeholder="https://pharma-ai.example.workers.dev"></div>
+    <div class="btns"><button class="main" id="licsave">تفعيل</button></div>
+    <p class="muted" id="licmsg" style="margin-top:8px">غير مفعّل</p>
+  </div>
+  <div class="field"><label>تغطية الطلبية (يوم)</label><input id="cfg-cover" inputmode="numeric" placeholder="30"></div>
+  <div class="field"><label>مفتاح Anthropic API (بديل للمطوّر فقط)</label><input id="cfg-key" placeholder="sk-ant-..."></div>
   <div class="field"><label>الموديل</label><input id="cfg-model"></div>
   <div class="field" style="display:flex;align-items:center;gap:8px">
     <input type="checkbox" id="cfg-hw" style="width:auto" checked>
@@ -615,7 +666,7 @@
 
 <div class="modal" id="lockwin"><div class="sheet" style="max-width:330px;text-align:center">
   <div class="logo big">℞</div>
-  <h3 style="text-align:center">PHARMA</h3>
+  <h3 style="text-align:center">ترياق</h3>
   <p class="muted">أدخل رمز الدخول</p>
   <input id="lockpin" type="password" inputmode="numeric" style="text-align:center;font-size:1.3rem;letter-spacing:5px">
   <p class="warn" id="lockmsg" style="font-size:.8rem;min-height:1em"></p>
@@ -640,13 +691,32 @@
 </div>
 
 <input type="file" id="photo" accept="image/*" capture="environment">
+<div class="modal" id="infowin"><div class="sheet" style="max-width:660px">
+  <h3 id="infotitle" style="margin:0 0 6px"></h3>
+  <div id="infobody"></div>
+  <div class="btns"><button onclick="this.closest('.modal').classList.remove('on')">إغلاق</button></div>
+</div></div>
 <div id="sharebar" class="sharebar"></div>
+<div id="boot"><div class="mark">℞</div>
+  <b id="bootname">ترياق</b><small>نظام إدارة الصيدلية</small>
+  <div class="bar"><i></i></div></div>
 <div id="toast"></div>
 <script src="vendor/zxing.min.js"></script>
 <script src="vendor/fflate.min.js"></script>
 <script src="data/seed.js"></script>
 <script src="data/prices.js"></script>
 <script src="app.js"></script>
-<script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}</script>
+<script>
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}
+(function(){
+  var b=document.getElementById("boot");
+  try{var c=JSON.parse(localStorage.getItem("ph.cfg")||"{}");
+      if(c.shop) document.getElementById("bootname").textContent=c.shop;   /* اسم الصيدلية إن سُجّل */}catch(e){}
+  var hide=function(){ b.classList.add("off"); setTimeout(function(){ b.style.display="none"; },400); };
+  if(document.readyState==="complete") setTimeout(hide,180);
+  else window.addEventListener("load",function(){ setTimeout(hide,180); });
+  setTimeout(hide,4000);                       /* أمان: لا تبقَ الشاشة عالقة أبداً */
+})();
+</script>
 </body>
 </html>
