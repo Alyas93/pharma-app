@@ -4,6 +4,32 @@ const $ = id => document.getElementById(id);
 const money = n => (Number(n) || 0).toLocaleString("en-US");
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const DATE_RE = /(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{4})/;
+/* صلاحيات الأدوية تُكتب غالباً شهر/سنة أو JUN 2027 — نحوّلها إلى يوم/شهر/سنة */
+const MY_RE   = /(?:^|[^\d])(\d{1,2})\s*[\/\-.]\s*(20\d{2})(?!\d)/;
+const MONY_RE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*[\-\/ ]?\s*(20\d{2}|\d{2})\b/i;
+const MONS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+const pad2 = n => String(n).padStart(2, "0");
+function normExp(v) {
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return "";
+  let m = t.match(DATE_RE);
+  if (m) return pad2(m[1]) + "/" + pad2(m[2]) + "/" + m[3];
+  m = t.match(MONY_RE);
+  if (m) { const mo = MONS[m[1].toLowerCase().slice(0, 3)];
+           const y = m[2].length === 2 ? "20" + m[2] : m[2];
+           return "01/" + pad2(mo) + "/" + y; }
+  m = t.match(MY_RE);
+  if (m && +m[1] >= 1 && +m[1] <= 12) return "01/" + pad2(m[1]) + "/" + m[2];
+  return "";
+}
+/* يلتقط تاريخ الصلاحية من سطر ويعيد باقي السطر بدونه */
+function grabExp(t) {
+  for (const re of [DATE_RE, MONY_RE, MY_RE]) {
+    const m = t.match(re);
+    if (m) { const e = normExp(m[0]); if (e) return { exp: e, rest: t.replace(m[0], " ") }; }
+  }
+  return { exp: "", rest: t };
+}
 const F = ["n","b","sc","ss","c","k","p","q","min","e","t","cat"];   /* sup/pk تُضاف بالتعديل */
 
 const LS = {
@@ -25,7 +51,23 @@ let ME       = null;
 let PLANS    = LS.get("ph.plans", []);              /* أقساط */      /* {n, phone, bal, log:[{at,amt,note}]} */
 let CFG      = LS.get("ph.cfg", { shop: "PHARMA — صيدلية الياس", cur: "د.ع", margin: 25, expdays: 90,
                                   key: "", model: "claude-sonnet-4-5", safet: 0, safeb: 0 });
+let SEQ      = LS.get("ph.seq", 0);
 let ITEMS = [], CART = [], DISC = 0, PAYM = "نقد", PICK = null;
+
+/* كل صنف مضاف يأخذ رقماً ثابتاً (uid) لا يتغيّر بتغيّر ترتيب المصفوفة،
+   لأن مفاتيح PATCH كانت تعتمد على الفهرس فتنزلق التعديلات عند الاستعادة. */
+function migrateExtra() {
+  let max = SEQ - 1, dirty = false;
+  EXTRA.forEach((it, i) => {
+    if (it && it.uid == null) { it.uid = i; dirty = true; }          /* يحفظ ارتباط PATCH["x"+i] القديم */
+    if (it && it.uid > max) max = it.uid;
+  });
+  const seen = new Set();
+  EXTRA.forEach(it => { if (!it) return; while (seen.has(it.uid)) { it.uid = ++max; dirty = true; } seen.add(it.uid); });
+  if (max + 1 > SEQ) { SEQ = max + 1; LS.set("ph.seq", SEQ); }
+  if (dirty) LS.set("ph.extra", EXTRA);
+}
+function newExtra(rec) { rec.uid = SEQ++; LS.set("ph.seq", SEQ); EXTRA.push(rec); return rec; }
 
 function buildItems() {
   const fromSeed = SEED.rows.map((r, i) => {
@@ -33,7 +75,8 @@ function buildItems() {
     F.forEach((k, j) => { o[k] = r[j] === undefined ? "" : r[j]; });
     return Object.assign(o, PATCH["s" + i] || {});
   });
-  const fromExtra = EXTRA.map((it, i) => Object.assign({ id: "x" + i }, it, PATCH["x" + i] || {}));
+  migrateExtra();
+  const fromExtra = EXTRA.map(it => Object.assign({ id: "x" + it.uid }, it, PATCH["x" + it.uid] || {}));
   ITEMS = fromSeed.concat(fromExtra);
   ITEMS.forEach(it => {
     it._n = String(it.n || "").toLowerCase();
@@ -244,7 +287,7 @@ function saveEdit() {
   if (!data.n) return toast("الاسم مطلوب");
   if (EDITING.id) patchItem(EDITING, data);
   else {
-    EXTRA.push(Object.assign({ t: "مخزون", ss: "إدخال يدوي", cat: "غير مصنف" }, data));
+    newExtra(Object.assign({ t: "مخزون", ss: "إدخال يدوي", cat: "غير مصنف" }, data));
     LS.set("ph.extra", EXTRA); buildItems();
     const fresh = ITEMS[ITEMS.length - 1];
     if (QUICKCART && fresh) { QUICKCART = false; addToCart(fresh); toast("أُضيفت وأُدخلت الفاتورة"); }
@@ -374,13 +417,9 @@ function sheetFrom(rows) { return XLSX.utils.aoa_to_sheet(rows); }
 function saveWorkbook(wb, name) {
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  try {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    toast("حُفظ " + name);
-  } catch (e) { toast("تعذّر حفظ الملف على هذا الجهاز"); }
+  if (dlBlob(blob, name)) { toast("حُفظ " + name); shareBtn(blob, name); return; }
+  shareBlob(blob, name).then(ok => { if (!ok) toast("تعذّر حفظ الملف — جرّب زر المشاركة أو متصفح كروم"); });
+  shareBtn(blob, name);
 }
 async function exportDebtsXLSX() {
   if (!await ensureXLSX()) return;
@@ -641,7 +680,7 @@ function syncMerge(remote) {
   if (!remote || !remote.patch) return false;
   PATCH = Object.assign({}, remote.patch, PATCH);
   const seen = new Set(EXTRA.map(x => (x.n || "") + "|" + (x.b || "")));
-  (remote.extra || []).forEach(x => { const k = (x.n || "") + "|" + (x.b || ""); if (!seen.has(k)) { EXTRA.push(x); seen.add(k); } });
+  (remote.extra || []).forEach(x => { const k = (x.n || "") + "|" + (x.b || ""); if (!seen.has(k)) { newExtra(Object.assign({}, x, { uid: null })); seen.add(k); } });
   const inv = new Set(INVOICES.map(v => v.at + "|" + v.total));
   (remote.inv || []).forEach(v => { if (!inv.has(v.at + "|" + v.total)) INVOICES.push(v); });
   (remote.cust || []).forEach(rc => { if (!findCust(rc.n)) CUST.push(rc); });
@@ -965,42 +1004,107 @@ function renderShift() {
 
 /* ---------- نسخ احتياطية ---------- */
 /* التنزيل داخل تطبيقات WebView قد يكون معطّلاً، فنوفّر بدائل */
-function saveFile(name, text, mime) {
+function dlBlob(blob, name) {
   try {
-    const blob = new Blob([text], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = name; a.rel = "noopener";
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    toast("حُفظ الملف: " + name);
     return true;
-  } catch (e) {
+  } catch (e) { return false; }
+}
+/* داخل تطبيق APK قد يكون التنزيل معطّلاً — نعرض المشاركة كبديل */
+async function shareBlob(blob, name) {
+  try {
+    if (navigator.share && navigator.canShare && typeof File === "function") {
+      const file = new File([blob], name, { type: blob.type || "application/octet-stream" });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return true; }
+    }
+  } catch (e) {}
+  return false;
+}
+function shareBtn(blob, name) {
+  if (!(navigator.share && navigator.canShare)) return;
+  const el = $("sharebar"); if (!el) return;
+  el.innerHTML = '<button class="main" id="sharebtn" type="button">إرسال ' + esc(name) + '</button>' +
+                 '<button class="x" id="sharex" type="button">✕</button>';
+  el.classList.add("on");
+  $("sharebtn").onclick = async () => {
+    if (!await shareBlob(blob, name)) toast("تعذّرت المشاركة على هذا الجهاز");
+  };
+  $("sharex").onclick = () => el.classList.remove("on");
+  clearTimeout(shareBtn._t); shareBtn._t = setTimeout(() => el.classList.remove("on"), 60000);
+}
+function saveFile(name, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  if (dlBlob(blob, name)) { toast("حُفظ الملف: " + name); shareBtn(blob, name); return true; }
+  shareBlob(blob, name).then(ok => {
+    if (ok) return;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text)
         .then(() => toast("تعذّر التنزيل — نُسخ المحتوى، الصقه في ملف نصي"))
         .catch(() => toast("تعذّر حفظ الملف على هذا الجهاز"));
     } else toast("تعذّر حفظ الملف على هذا الجهاز");
-    return false;
-  }
+  });
+  return false;
+}
+/* النسخة الاحتياطية = كل شيء: المخزون والفواتير والديون والأقساط والمخازن والموظفون */
+function backupData() {
+  return Object.assign(syncPayload(), { app: "PHARMA", v: 3, cfg: CFG, awh: AWH, seq: SEQ });
 }
 function backup() {
   saveFile("elyas-backup-" + new Date().toISOString().slice(0, 10) + ".json",
-           JSON.stringify({ patch: PATCH, extra: EXTRA, inv: INVOICES, held: HELD, purch: PURCH, cust: CUST, cfg: CFG }),
-           "application/json");
+           JSON.stringify(backupData()), "application/json");
+}
+function refreshAll() {
+  buildItems(); renderHome(); renderStock(); renderPurch(); renderCust();
+  renderWH(); renderPlans(); renderUsers(); renderDebt(); renderTickets(); renderCart();
 }
 async function restore(f) {
-  const d = JSON.parse(await f.text());
-  PATCH = d.patch || {}; EXTRA = d.extra || []; INVOICES = d.inv || []; HELD = d.held || []; PURCH = d.purch || []; CUST = d.cust || [];
-  CFG = Object.assign(CFG, d.cfg || {});
-  ["patch","extra","inv","held","purch","cust","cfg"].forEach((k, i) => LS.set("ph." + k, [PATCH, EXTRA, INVOICES, HELD, PURCH, CUST, CFG][i]));
-  buildItems(); renderHome(); renderStock(); toast("استُعيدت النسخة");
+  let d;
+  try { d = JSON.parse(await f.text()); }
+  catch (e) { return toast("الملف ليس نسخة احتياطية سليمة (JSON غير صالح)"); }
+  if (!d || typeof d !== "object" || (!d.patch && !d.extra && !d.inv && !d.cust))
+    return toast("الملف لا يحتوي بيانات الصيدلية");
+  const info = "الأصناف المضافة: " + ((d.extra || []).length) +
+               " · الفواتير: " + ((d.inv || []).length) +
+               " · الزبائن: " + ((d.cust || []).length) +
+               (d.at ? "\nتاريخ النسخة: " + new Date(d.at).toLocaleString("en-GB") : "");
+  if (!confirm("ستُستبدل بيانات هذا الجهاز بمحتوى النسخة.\n" + info + "\n\nمتابعة؟")) return;
+  try {
+    const keep = (v, cur) => (v === undefined || v === null ? cur : v);
+    PATCH    = keep(d.patch, PATCH);
+    EXTRA    = keep(d.extra, EXTRA);
+    INVOICES = keep(d.inv,   INVOICES);
+    HELD     = keep(d.held,  HELD);
+    PURCH    = keep(d.purch, PURCH);
+    CUST     = keep(d.cust,  CUST);
+    PLANS    = keep(d.plans, PLANS);
+    WH       = keep(d.wh,    WH);
+    USERS    = keep(d.users, USERS);
+    AWH      = keep(d.awh,   AWH);
+    CFG      = Object.assign(CFG, d.cfg || {});
+    if (typeof d.seq === "number" && d.seq > SEQ) SEQ = d.seq;
+    const map = { patch: PATCH, extra: EXTRA, inv: INVOICES, held: HELD, purch: PURCH,
+                  cust: CUST, plans: PLANS, wh: WH, users: USERS, awh: AWH, cfg: CFG, seq: SEQ };
+    Object.keys(map).forEach(k => LS.set("ph." + k, map[k]));
+    refreshAll();
+    toast("استُعيدت النسخة" + (d.plans === undefined ? " — نسخة قديمة: الأقساط والموظفون بقيا كما هما" : ""));
+  } catch (e) { toast("تعذّرت الاستعادة: " + (e.message || e)); }
 }
 function exportCSV() {
   const q = s => '"' + String(s == null ? "" : s).replace(/"/g, '""') + '"';
-  const head = ["الاسم","الباركود","الاسم العلمي","الشركة","الكلفة","البيع","الكمية","الحد","الانتهاء","النوع"];
-  const body = stockList().map(it => [it.n, it.b, it.sc, it.c, it.k, it.p, it.q, it.min, it.e, it.t].map(q).join(","));
-  saveFile("stock.csv", "\uFEFF" + [head.map(q).join(",")].concat(body).join("\r\n"), "text/csv;charset=utf-8");
+  const view = stockList();
+  let rows = ITEMS, tag = "all";
+  if (view.length !== ITEMS.length) {
+    if (confirm("تصدير النتائج المعروضة فقط (" + view.length + " صنفاً)؟\n\nإلغاء = تصدير المخزون كاملاً (" + ITEMS.length + " صنفاً)"))
+      { rows = view; tag = "view"; }
+  }
+  const head = ["الاسم","الباركود","الاسم العلمي","الشركة","الكلفة","البيع","الكمية","الحد","أقرب انتهاء","المذخر","النوع"];
+  const body = rows.map(it => [it.n, it.b, it.sc, it.c, it.k, it.p, it.q, it.min, nearestExp(it), it.sup || "", it.t].map(q).join(","));
+  saveFile("stock-" + tag + "-" + new Date().toISOString().slice(0, 10) + ".csv",
+           "\uFEFF" + [head.map(q).join(",")].concat(body).join("\r\n"), "text/csv;charset=utf-8");
 }
 
 /* ---------- التشغيل ---------- */
@@ -1439,7 +1543,8 @@ function init() {
   $("backup").onclick = backup;
   try {
     const used = Math.round((JSON.stringify(PATCH).length + JSON.stringify(EXTRA).length +
-                             JSON.stringify(INVOICES).length) / 1024);
+                             JSON.stringify(INVOICES).length + JSON.stringify(CUST).length +
+                             JSON.stringify(PLANS).length + JSON.stringify(PURCH).length) / 1024);
     if (used > 3500) toast("بيانات الجهاز " + used + " ك.ب — صدّر نسخة احتياطية");
   } catch (e) {}
   $("restorebtn").onclick = () => $("restore").click();
@@ -1642,7 +1747,13 @@ async function startOCR() {
   };
 }
 async function ocr(source) {
-  if (!window.Tesseract) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js");
+  if (!window.Tesseract) {
+    try { await loadScript("vendor/tesseract.min.js"); }
+    catch (e) {
+      try { await loadScript("https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"); }
+      catch (e2) { throw new Error("التعرّف الضوئي يحتاج إنترنت في أول تشغيل"); }
+    }
+  }
   const w = await Tesseract.createWorker(["eng"]);
   const { data } = await w.recognize(source); await w.terminate();
   return data.text;
@@ -1721,7 +1832,7 @@ function tafqit(num, cur) {
 function addToCart(it, qty) {
   const line = CART.find(l => l.id === it.id);
   if (line) line.q += (qty || 1);
-  else CART.push({ id: it.id, n: it.n, b: it.b || "", price: it.s || it.p || it.k || 0, q: qty || 1, stock: it.q || 0 });
+  else CART.push({ id: it.id, n: it.n, b: it.b || "", price: it.p || it.s || it.k || 0, q: qty || 1, stock: it.q || 0 });
   go("sale"); renderCart();
 }
 function renderCart() {
@@ -1886,21 +1997,33 @@ async function handleFiles(files) {
     } catch (e) { imsg("تعذّر قراءة " + f.name + ": " + (e.message || e)); }
   }
 }
-function imsg(t) { $("imsg").textContent = t; $("imsg").classList.add("on"); }
+function imsg(t, html) {
+  const el = $("imsg");
+  if (html) el.innerHTML = t; else el.textContent = t;
+  el.classList.add("on");
+}
 
 async function importSheet(f) {
   imsg("جارٍ قراءة " + f.name + "…");
   if (!window.XLSX) {
-    imsg("جارٍ تحميل قارئ الجداول (يحتاج إنترنت أول مرة)…");
+    imsg("جارٍ تحميل قارئ الجداول…");
     try { await loadScript("vendor/xlsx.min.js"); }
     catch (e) { await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"); }
   }
   const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, raw: true });
-  if (!rows.length) return imsg("الملف فارغ");
-  const head = findHeader(rows);
-  PREVIEW = { rows: rows.slice(head.at + 1), map: head.map, name: f.name, cols: rows[head.at], kind: "مخزون" };
+  /* نفحص كل الأوراق ونختار الورقة التي فيها جدول أصناف حقيقي */
+  let best = null;
+  wb.SheetNames.forEach(nm => {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[nm], { header: 1, blankrows: false, raw: true });
+    if (!rows.length) return;
+    const head = findHeader(rows);
+    const score = (Object.keys(head.map).length >= 2 ? 1e6 : 0) + Object.keys(head.map).length * 1000 + rows.length;
+    if (!best || score > best.score) best = { nm, rows, head, score };
+  });
+  if (!best) return imsg("الملف فارغ");
+  PREVIEW = { rows: best.rows.slice(best.head.at + 1), map: best.head.map,
+              name: f.name + (wb.SheetNames.length > 1 ? " · ورقة: " + best.nm : ""),
+              cols: best.rows[best.head.at], kind: "مخزون" };
   drawPreview();
 }
 const H = {
@@ -1951,15 +2074,43 @@ function fmtDate(v) {
     const d = XLSX.SSF.parse_date_code(v);
     if (d) return String(d.d).padStart(2,"0") + "/" + String(d.m).padStart(2,"0") + "/" + d.y;
   }
-  const m = String(v).match(DATE_RE);
-  return m ? m[0] : String(v);
+  const nz = normExp(v);
+  return nz || String(v).trim();
 }
-const toNum = v => { const x = String(v == null ? "" : v).replace(/[^\d.]/g, ""); return x ? Math.round(parseFloat(x)) : 0; };
+const toNum = v => {
+  let x = String(v == null ? "" : v)
+            .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))   /* أرقام عربية */
+            .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0))
+            .replace(/[^\d.,]/g, "");
+  if (!x) return 0;
+  x = x.replace(/,/g, "");                                   /* الفاصلة = فاصل آلاف */
+  if (/^\d{1,3}(\.\d{3})+$/.test(x)) x = x.replace(/\./g, "");   /* 12.500 = 12500 وليس 12.5 */
+  const n = parseFloat(x);
+  return isFinite(n) ? Math.round(n) : 0;
+};
+/* الباركودات (8 خانات فأكثر) ليست أسعاراً — تُستبعد من حساب السعر والكمية */
+const isCode = c => /\d{8,}/.test(String(c).replace(/\D/g, ""));
+/* أرقام الجرعة (500mg، 5ml، 2%) ليست سعراً ولا كمية، وتبقى جزءاً من الاسم */
+const UNIT_RE = /\d+(?:[.,]\d+)?\s*(?:mg|mcg|gm|g|ml|cc|iu|%)\b/gi;
+const isUnit  = c => /^\d+(?:[.,]\d+)?\s*(?:mg|mcg|gm|g|ml|cc|iu|%)$/i.test(String(c).trim());
 
+let LAST_IMPORT = null;
+function undoImport() {
+  if (!LAST_IMPORT) return toast("لا يوجد استيراد يمكن التراجع عنه");
+  if (!confirm("التراجع عن آخر استيراد وإرجاع المخزون كما كان؟")) return;
+  PATCH = LAST_IMPORT.patch; EXTRA = LAST_IMPORT.extra; PURCH = LAST_IMPORT.purch; SEQ = LAST_IMPORT.seq;
+  LS.set("ph.patch", PATCH); LS.set("ph.extra", EXTRA); LS.set("ph.purch", PURCH); LS.set("ph.seq", SEQ);
+  LAST_IMPORT = null;
+  buildItems(); renderHome(); renderStock(); renderPurch();
+  imsg("تم التراجع — المخزون رجع كما كان قبل الاستيراد");
+}
 function doImport() {
   if (!PREVIEW) return;
   const m = PREVIEW.map;
   let added = 0, updated = 0, changed = 0, spent = 0;
+  /* لقطة قبل الكتابة حتى يمكن التراجع عن استيراد خاطئ */
+  const snap = { patch: JSON.parse(JSON.stringify(PATCH)), extra: JSON.parse(JSON.stringify(EXTRA)),
+                 purch: JSON.parse(JSON.stringify(PURCH)), seq: SEQ };
   const SUP = (PREVIEW.kind === "جديد")
     ? (prompt("اسم المذخر أو الشركة الموردة لهذه القائمة:", PREVIEW.sup || "") || "").trim()
     : "";
@@ -1974,12 +2125,13 @@ function doImport() {
       e: m.e != null ? fmtDate(r[m.e]) : "",
       q: m.q != null ? toNum(r[m.q]) : 0,
       k: m.k != null ? toNum(r[m.k]) : 0,
-      s: m.s != null ? toNum(r[m.s]) : 0,
+      p: m.s != null ? toNum(r[m.s]) : 0,   /* سعر البيع يُخزَّن في p — هو الحقل الذي يستعمله باقي التطبيق */
       t: PREVIEW.kind,
       src: PREVIEW.name
     };
     const found = rec.b ? ITEMS.find(x => x.b && x.b === rec.b)
                         : ITEMS.find(x => x._n === name.toLowerCase());
+    if (rec.q) spent += rec.q * (rec.k || 0);   /* يشمل الأصناف الجديدة أيضاً */
     if (found) {
       const ch = {};
       if (rec.k) {
@@ -1987,8 +2139,7 @@ function doImport() {
         ch.k = rec.k;
       }
       if (SUP) ch.sup = SUP;
-      if (rec.q) spent += rec.q * (rec.k || 0);
-      if (rec.s) ch.s = rec.s;
+      if (rec.p) { ch.p = rec.p; ch.s = rec.p; }   /* s حقل قديم — نبقيه متطابقاً */
       if (PREVIEW.kind === "جديد") {
         if (rec.q) { addBatch(found, rec.q, rec.e, rec.lot); ch.q = found.q; }  /* شراء: تشغيلة جديدة */
       } else if (rec.q || rec.q === 0) ch.q = rec.q;                            /* جرد: تثبيت الكمية */
@@ -1996,7 +2147,8 @@ function doImport() {
       patchItem(found, ch); updated++;
     } else {
       if (PREVIEW.kind === "جديد" && rec.q) rec.bt = [{ l: "", e: rec.e || "", q: rec.q }];
-      EXTRA.push(rec); added++;
+      if (SUP) rec.sup = SUP;
+      newExtra(rec); added++;
     }
   });
   LS.set("ph.extra", EXTRA); buildItems(); renderHome(); renderStock();
@@ -2010,7 +2162,9 @@ function doImport() {
               (changed ? " · تغيّر سعر " + changed + " صنفاً" : "") +
               (SUP ? " · المذخر: " + SUP : "");
   PREVIEW = null; $("prev").style.display = "none"; $("doimport").style.display = "none";
-  imsg(msg);
+  LAST_IMPORT = snap;
+  imsg(esc(msg) + ' <button type="button" id="undoimp">تراجع عن هذا الاستيراد</button>', true);
+  const u = $("undoimp"); if (u) u.onclick = undoImport;
 }
 
 /* استيراد صورة قائمة: تعرّف ضوئي ثم تحليل الأسطر */
@@ -2033,6 +2187,8 @@ async function importImage(f) {
 async function importDocx(f) {
   imsg("جارٍ قراءة ملف Word…");
   const buf = new Uint8Array(await f.arrayBuffer());
+  if (!(buf[0] === 0x50 && buf[1] === 0x4b))          /* ليست حزمة ZIP = ملف .doc قديم */
+    return imsg("هذا ملف Word قديم (.doc) — افتحه واحفظه بصيغة .docx ثم أعد المحاولة");
   const files = fflate.unzipSync(buf);
   const xml = files["word/document.xml"];
   if (!xml) return imsg("ملف Word غير مقروء — احفظه بصيغة .docx حديثة");
@@ -2052,8 +2208,8 @@ async function importDocx(f) {
 async function importPDF(f) {
   imsg("جارٍ قراءة " + f.name + "…");
   if (!window.pdfjsLib) {
-    imsg("جارٍ تحميل قارئ PDF (يحتاج إنترنت أول مرة)…");
-    try { await loadScript("vendor/pdf.min.js"); }
+    imsg("جارٍ تحميل قارئ PDF…");
+    try { await loadScript("vendor/pdf.min.js"); window.__localpdf = true; }
     catch (e) { await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"); }
   }
   if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
@@ -2108,25 +2264,31 @@ function lineToRow(line) {
     const name = cells.find(c => /[A-Za-z\u0600-\u06FF]{3,}/.test(c) && !DATE_RE.test(c)) || "";
     if (!name) return null;
     const rest = cells.filter(c => c !== name);
-    const date = (t.match(DATE_RE) || [""])[0];
+    const date = grabExp(t).exp;
     const comp = rest.find(c => /[A-Za-z\u0600-\u06FF]{3,}/.test(c) && !DATE_RE.test(c) && !/\d{3,}/.test(c)) || "";
-    const nums = rest.filter(c => !DATE_RE.test(c)).map(toNum).filter(n => n > 0);
+    const nums = rest.filter(c => !DATE_RE.test(c) && !MY_RE.test(c) && !isCode(c) && !isUnit(c)).map(toNum).filter(n => n > 0);
     if (!nums.length) return null;
     const total = Math.max.apply(null, nums);
     let price = 0, qty = 0;
-    for (const a of nums) for (const b of nums) if (a * b === total && b <= 10000 && a >= price) { price = a; qty = b; }
+    for (const a of nums) for (const b of nums) if (a * b === total && b > 1 && b <= 10000 && a >= price) { price = a; qty = b; }
     if (!price) { const r = nums.filter(n => n !== total).sort((x, y) => y - x); price = r[0] || total; qty = price ? Math.round(total / price) : 0; }
     return [name, comp, date, qty, price];
   }
 
-  const date = (t.match(DATE_RE) || [""])[0];
-  const rest = t.replace(DATE_RE, " ");
-  const nums = (rest.match(/[\d,]+(?:\.\d+)?/g) || []).map(toNum).filter(n => n > 0);
-  const name = rest.replace(/[\d,]+(?:\.\d+)?/g, " ").replace(/[%|]/g, " ").replace(/\s+/g, " ").trim();
+  const g = grabExp(t);
+  const date = g.exp, rest = g.rest;
+  const nums = (rest.replace(UNIT_RE, " ").match(/[\d,]+(?:\.\d+)?/g) || [])
+                 .filter(c => !isCode(c)).map(toNum).filter(n => n > 0);
+  const kept = [];
+  let ki = 0;
+  let name = rest.replace(UNIT_RE, m => { kept.push(m.replace(/\s+/g, "")); return " \u0001 "; })
+                 .replace(/[\d,]+(?:\.\d+)?/g, " ").replace(/[%|]/g, " ")
+                 .replace(/\u0001/g, () => kept[ki++] || "")
+                 .replace(/\s+/g, " ").trim();
   if (!name || nums.length < 2) return null;
   const total = Math.max.apply(null, nums);
   let price = 0, qty = 0;
-  for (const a of nums) for (const b of nums) if (a * b === total && b <= 10000 && a >= price) { price = a; qty = b; }
+  for (const a of nums) for (const b of nums) if (a * b === total && b > 1 && b <= 10000 && a >= price) { price = a; qty = b; }
   if (!price) { const r = nums.filter(n => n !== total).sort((x, y) => y - x); price = r[0] || total; qty = price ? Math.round(total / price) : 0; }
   return [name, "", date, qty, price];
 }

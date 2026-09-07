@@ -233,6 +233,13 @@
   }
   @media print{ body>*{display:none!important} #receipt{display:block!important;position:static;background:#fff}
                 #receipt .sheet{box-shadow:none;max-width:100%} #rcx,#rcprint{display:none!important} }
+  /* شريط المشاركة: بديل التنزيل داخل تطبيق APK */
+  .sharebar{display:none;position:fixed;left:0;right:0;bottom:calc(84px + var(--safeb));
+            z-index:30;padding:0 12px;gap:8px;justify-content:center;align-items:center}
+  .sharebar.on{display:flex}
+  .sharebar button{box-shadow:0 6px 18px rgba(0,0,0,.18);max-width:80%;
+                   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sharebar .x{padding:11px 14px;font-weight:700}
 </style>
 </head>
 <body>
@@ -633,6 +640,7 @@
 </div>
 
 <input type="file" id="photo" accept="image/*" capture="environment">
+<div id="sharebar" class="sharebar"></div>
 <div id="toast"></div>
 <script src="vendor/zxing.min.js"></script>
 <script src="vendor/fflate.min.js"></script>
