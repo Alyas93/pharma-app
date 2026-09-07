@@ -1,0 +1,51 @@
+{
+  "name": "PHARMA — نظام الصيدلية",
+  "short_name": "PHARMA",
+  "description": "نقطة بيع وإدارة مخزون صيدلية: باركود، مذاخر، أسعار، مواد فعالة",
+  "id": "/elyas-pos/",
+  "start_url": "/elyas-pos/",
+  "scope": "/elyas-pos/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#f5f8f7",
+  "theme_color": "#0d2136",
+  "categories": [
+    "business",
+    "medical",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "/elyas-pos/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/elyas-pos/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/elyas-pos/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "شاشة البيع",
+      "short_name": "بيع",
+      "url": "/elyas-pos/?tab=sale"
+    },
+    {
+      "name": "المخزون",
+      "short_name": "مخزون",
+      "url": "/elyas-pos/?tab=stock"
+    }
+  ]
+}

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>PHARMA — نظام الصيدلية</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d2136">
+<meta name="mobile-web-app-capable" content="yes">
+
+<style>
+  :root{color-scheme:only light;--safet:0px;--safeb:0px;
+        --ink:#0b1b2b;--muted:#6b7b8c;--line:#e2e8f0;--paper:#f4f7fb;--card:#fff;
+        --brand:#0d2136;--brand2:#16324f;--accent:#22c9d6;--accent2:#7de3ec;
+        --warn:#b45309;--bad:#b91c1c;--soft:#e6f7f9}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{background:var(--paper)}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       padding-bottom:calc(74px + var(--safeb) + env(safe-area-inset-bottom,0px));
+       font-family:"Segoe UI",Tahoma,"Noto Naskh Arabic",Arial,sans-serif;line-height:1.55;font-size:15px}
+  .wrap{max-width:760px;margin:0 auto;padding:12px}
+  header{background:var(--brand);color:#fff;
+         padding:calc(11px + var(--safet) + env(safe-area-inset-top,0px)) 14px 11px;
+         display:flex;justify-content:space-between;align-items:center;gap:10px;
+         box-shadow:0 2px 10px rgba(15,92,70,.18);position:sticky;top:0;z-index:14}
+  header .brand{display:flex;align-items:center;gap:10px}
+  header b{font-size:1.02rem;display:block;line-height:1.2}
+  header .clock{font-size:.72rem;opacity:.88}
+  .logo{width:36px;height:36px;border-radius:12px;
+        background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06242b;
+        display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800}
+  .logo.big{width:56px;height:56px;margin:0 auto 8px;background:var(--soft);color:var(--brand);font-size:1.6rem}
+  .page{display:none}.page.on{display:block}
+  h3{font-size:.95rem;margin:16px 0 8px}
+  .muted{color:var(--muted);font-size:.84rem}
+  .warn{color:var(--warn)}.bad{color:var(--bad)}
+  button{font-family:inherit;font-size:.86rem;padding:11px 13px;border-radius:11px;
+         border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+  button{border-radius:14px}
+  button.main{background:var(--accent);color:#06242b;border-color:var(--accent);font-weight:700;
+              box-shadow:0 2px 10px rgba(34,201,214,.35)}
+  button.dark{background:var(--brand);color:#fff;border-color:var(--brand)}
+  button:active{transform:translateY(1px)}
+  button.ghost{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.4);color:#fff}
+  button.ghost{background:none;border-color:rgba(255,255,255,.5);color:#fff}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .btns button{flex:1;min-width:104px}
+  input,select,textarea{width:100%;padding:11px;font-family:inherit;font-size:.98rem;background:var(--card);
+        border:1px solid var(--line);border-radius:11px;color:var(--ink);outline:none}
+  input:focus,textarea:focus{border-color:var(--brand)}
+  input[type=file]{display:none}
+  .field{margin-top:9px}.field label{font-size:.76rem;color:var(--muted);display:block;margin-bottom:3px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  /* ---- بطاقات اللوحة ---- */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:15px;position:relative;
+       overflow:hidden;box-shadow:0 6px 18px rgba(13,33,54,.06);transition:transform .12s}
+  .kpi:active{transform:scale(.985)}
+  .kpi i{font-style:normal;font-size:.74rem;color:var(--muted)}
+  .kpi b{display:block;font-size:1.35rem;margin:3px 0 1px}
+  .kpi small{color:var(--muted);font-size:.7rem}
+  .kpi::after{content:"";position:absolute;inset-block-start:-26px;inset-inline-start:-26px;
+              width:76px;height:76px;border-radius:50%;background:var(--soft);opacity:.85}
+  .kpi.g b{color:var(--brand)}
+  .kpi.g b{color:var(--brand)}.kpi.o b{color:var(--warn)}.kpi.r b{color:var(--bad)}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:12px;
+         box-shadow:0 6px 18px rgba(13,33,54,.06)}
+  .panel h4{display:flex;align-items:center;gap:7px}
+  .panel h4::before{content:"";width:4px;height:15px;background:var(--accent);border-radius:4px}
+  .panel h4{margin:0 0 9px;font-size:.9rem}
+  .bars{display:flex;align-items:flex-end;gap:6px;height:96px}
+  .bars div{flex:1;background:var(--soft);border-radius:6px 6px 0 0;position:relative}
+  .bars div span{position:absolute;inset-inline:0;bottom:-17px;text-align:center;font-size:.62rem;color:var(--muted)}
+  .bars div b{position:absolute;inset-inline:0;top:-15px;text-align:center;font-size:.6rem;color:var(--brand);font-weight:600}
+  .lst div.row{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--line);
+               padding:7px 0;font-size:.85rem}
+  .lst div.row:first-child{border-top:0}
+  .lst .row b{font-weight:600}
+  /* ---- بحث ---- */
+  .searchbox{position:relative}
+  #q{font-size:1.03rem;padding:15px 15px 15px 60px;border-width:1px;border-radius:16px;
+      box-shadow:0 6px 18px rgba(13,33,54,.06)}
+  .searchbox::before{content:"✦";position:absolute;left:9px;top:9px;width:42px;height:42px;
+      border-radius:12px;background:var(--brand);color:var(--accent);display:flex;align-items:center;
+      justify-content:center;font-size:1.05rem;pointer-events:none}
+  .sug{position:absolute;z-index:9;inset-inline:0;top:calc(100% + 6px);background:var(--card);
+       border:1px solid var(--line);border-radius:12px;max-height:330px;overflow:auto;display:none;
+       box-shadow:0 12px 26px rgba(15,92,70,.15)}
+  .sug.on{display:block}
+  .opt{padding:10px 13px;border-bottom:1px solid var(--line);cursor:pointer}
+  .opt:last-child{border-bottom:0}
+  .opt b{font-size:.92rem;font-weight:600}
+  .opt small{display:block;color:var(--muted);font-size:.74rem}
+  .opt.on,.opt:hover{background:var(--soft)}
+  .chips{display:flex;gap:7px;margin-top:9px;overflow-x:auto}
+  .chip{font-size:.77rem;padding:5px 13px;border:1px solid var(--line);border-radius:20px;
+        background:var(--card);color:var(--muted);cursor:pointer;white-space:nowrap}
+  .chip.on{background:var(--brand);color:var(--accent);border-color:var(--brand);font-weight:700}
+  .card{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;
+        display:none;box-shadow:0 6px 18px rgba(13,33,54,.06)}
+  .card.on{display:block}
+  .nm{font-size:1rem;font-weight:700}
+  .sci{color:#0e8f9c;font-size:.87rem;font-weight:600}
+  .sci.none{color:var(--muted);font-weight:400}
+  .meta{color:var(--muted);font-size:.77rem;margin-bottom:11px}
+  .big{font-size:2.15rem;font-weight:800;color:var(--brand);letter-spacing:-1px}
+  .big em{font-style:normal;font-size:.82rem;font-weight:400;color:var(--muted);margin-inline-start:6px}
+  .kv{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+  .kv div{border-top:1px solid var(--line);padding-top:6px;font-size:.9rem}
+  .kv i{display:block;font-style:normal;color:var(--muted);font-size:.72rem}
+  .flag{margin-top:11px;padding:8px 11px;border-radius:9px;font-size:.81rem;display:none}
+  .flag.on{display:block}.flag.warn{background:#fdf0e8;color:var(--warn)}
+  /* ---- نقطة البيع ---- */
+  .posbar{display:flex;gap:6px;padding:10px;background:var(--brand);position:relative;align-items:center}
+  .posbar input{flex:1;padding:10px;border-radius:9px;border:0;font-size:.95rem;min-width:0}
+  .posbar button{padding:10px 11px;font-size:.8rem;white-space:nowrap}
+  .badge{background:var(--warn);color:#fff;border-radius:9px;padding:0 6px;font-size:.68rem;margin-inline-start:3px}
+  .psug{position:absolute;z-index:9;inset-inline:10px;top:calc(100% - 3px);background:#fff;
+        border:1px solid var(--line);border-radius:11px;max-height:270px;overflow:auto;display:none;
+        box-shadow:0 12px 26px rgba(0,0,0,.22)}
+  .psug.on{display:block}
+  .favs{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;background:var(--soft)}
+  .favs button{white-space:nowrap;font-size:.75rem;padding:7px 11px;border-radius:18px;max-width:160px;
+               overflow:hidden;text-overflow:ellipsis}
+  .pos-h{display:flex;background:#fff;font-size:.73rem;font-weight:700;color:var(--muted);
+         padding:7px 10px;border-bottom:1px solid var(--line)}
+  .pos-h .c1{flex:1}.pos-h .c2,.pos-h .c3,.pos-h .c4{width:70px;text-align:center}
+  .prow{border-bottom:1px solid var(--line);padding:7px 10px;background:#fff}
+  .prow .top{display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted)}
+  .prow .nm{font-size:.86rem;font-weight:600;margin:1px 0 5px}
+  .prow .cells{display:flex;align-items:center;gap:5px}
+  .prow .cells .grow{flex:1;font-size:.7rem;color:var(--muted)}
+  .prow input{width:64px;text-align:center;padding:9px 3px;font-size:.9rem;border-radius:9px}
+  .step{display:flex;align-items:center;gap:3px}
+  .step button{width:34px;height:38px;padding:0;font-size:1.15rem;font-weight:700;border-radius:9px}
+  .prow .tot{width:70px;text-align:center;font-weight:700;color:var(--brand);font-size:.84rem}
+  .prow .del{color:var(--warn);background:none;border:0;padding:3px 5px;font-size:.84rem}
+  .prow .ld{width:34px;height:38px;padding:0;font-size:.9rem;border-radius:9px;color:var(--brand)}
+  .posfoot{position:fixed;inset-inline:0;bottom:calc(72px + var(--safeb) + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid var(--line);
+           padding:8px 12px;z-index:11;max-width:760px;margin:0 auto}
+  .pf-line{display:flex;justify-content:space-between;font-size:.77rem;color:var(--muted)}
+  .pf-line b{color:var(--ink)}
+  .mini{border:0;background:none;color:var(--brand);font-size:.74rem;padding:0 4px;text-decoration:underline}
+  .pf-row{display:flex;align-items:center;gap:8px;margin-top:4px}
+  .amount{flex:1;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:8px 10px;
+          font-size:1.22rem;font-weight:800;color:var(--brand);text-align:center}
+  .count{background:var(--soft);border-radius:9px;padding:8px 12px;font-weight:700;font-size:.88rem}
+  .words{font-size:.73rem;color:var(--muted);margin-top:3px;min-height:1em}
+  .posfoot .btns{margin-top:6px}
+  #pg-sale{padding-bottom:200px}
+  /* ---- جداول ---- */
+  .tbl{width:100%;border-collapse:collapse;font-size:.82rem;background:var(--card)}
+  .tbl th{background:var(--soft);padding:7px;text-align:right;font-size:.75rem}
+  .tbl td{border-top:1px solid var(--line);padding:7px}
+  .tbl tr{cursor:pointer}
+  .tbl tbody tr:nth-child(even){background:#fbfdfc}
+  .tbl tbody tr:active{background:var(--soft)}
+  .tbl thead th{position:sticky;top:0;z-index:2}
+  /* ---- نوافذ ---- */
+  .modal{position:fixed;inset:0;background:rgba(8,18,15,.55);z-index:25;display:none;
+         align-items:center;justify-content:center;padding:14px}
+  .modal.on{display:flex}
+  .sheet{background:#fff;border-radius:20px;padding:16px;max-width:440px;width:100%;
+         max-height:88vh;overflow:auto;position:relative;display:flex;flex-direction:column}
+  .sheet h3{margin-top:0;padding-inline-end:34px}
+  .sheet > .btns:last-child{position:sticky;bottom:-16px;background:#fff;padding:10px 0 2px;
+                            margin-top:12px;border-top:1px solid var(--line);z-index:3}
+  .xclose{position:absolute;top:10px;inset-inline-end:10px;width:32px;height:32px;padding:0;
+          border-radius:50%;font-size:1.1rem;line-height:1;color:var(--muted);z-index:4}
+  .due{display:flex;justify-content:space-between;align-items:center;background:var(--soft);
+       border-radius:11px;padding:11px 13px;margin:8px 0;font-size:.9rem}
+  .due b{font-size:1.3rem;color:var(--brand)}
+  .due.change b{color:var(--warn)}
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+  .keypad button{padding:13px 0;font-size:1.03rem;font-weight:600}
+  .tk{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:6px}
+  .tk b{font-size:.86rem}.tk small{display:block;color:var(--muted);font-size:.73rem}
+  .tk .btns{margin-top:6px}.tk .btns button{padding:7px 10px;font-size:.75rem}
+  .scan{position:fixed;inset:0;background:#07110e;z-index:30;display:none;flex-direction:column;
+        align-items:center;justify-content:center}
+  .scan.on{display:flex}
+  .viewport{position:relative;width:100%;max-width:540px}
+  .scan video{width:100%;border-radius:12px;background:#000;display:block}
+  .guide{position:absolute;inset:26% 8%;border:2px solid #6fe0b6;border-radius:12px;
+         box-shadow:0 0 0 100vmax rgba(0,0,0,.35)}
+  .guide::after{content:"";position:absolute;inset-inline:6%;top:50%;height:2px;background:#6fe0b6;opacity:.85;
+                animation:sweep 1.6s ease-in-out infinite}
+  @keyframes sweep{0%{top:12%}50%{top:88%}100%{top:12%}}
+  .scan p{color:#dce8e4;font-size:.85rem;margin:12px 16px;text-align:center}
+  .scan .close{position:absolute;top:14px;inset-inline-end:16px}
+  .out{white-space:pre-wrap;font-size:.89rem;background:var(--soft);border-radius:10px;padding:11px;margin-top:9px;display:none}
+  .out.on{display:block}
+  .nav{position:fixed;inset-inline:0;bottom:0;background:var(--brand);border-top:0;
+       display:flex;z-index:12;max-width:760px;margin:0 auto;
+       padding-bottom:calc(var(--safeb) + env(safe-area-inset-bottom,0px))}
+  .nav{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .nav button{flex:1 0 auto;min-width:74px;min-height:60px;border:0;border-radius:0;padding:12px 8px;
+              font-size:.86rem;font-weight:600;color:rgba(255,255,255,.7);background:none;white-space:nowrap}
+  .nav button.on{color:var(--accent);font-weight:700;box-shadow:inset 0 3px 0 var(--accent);
+                 background:rgba(255,255,255,.06)}
+  .nav{box-shadow:0 -6px 18px rgba(13,33,54,.18)}
+  body.cashier header,body.cashier .nav{display:none}
+  body.cashier{padding-bottom:0}
+  body.cashier .posbar{position:sticky;top:0;z-index:14}
+  body.cashier .posfoot{bottom:0;padding-bottom:calc(9px + var(--safeb) + env(safe-area-inset-bottom,0px))}
+  body.cashier .posbar{padding-top:calc(9px + var(--safet) + env(safe-area-inset-top,0px))}
+  body.cashier #pg-sale{padding-bottom:215px;min-height:100vh}
+  body.cashier .exitcash{display:inline-block}
+  .exitcash{display:none}
+  .sum{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:7px 0;font-size:.88rem}
+  .sum:first-of-type{border-top:0}
+  .sum b{font-weight:700}
+  #toast{position:fixed;bottom:calc(96px + var(--safeb));inset-inline:16px;background:var(--ink);color:#fff;padding:11px 14px;
+         border-radius:11px;font-size:.85rem;text-align:center;opacity:0;pointer-events:none;transition:.2s;z-index:40}
+  #toast.on{opacity:.96}
+  .labels{display:flex;flex-wrap:wrap;gap:6px}
+  .label{border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:150px;text-align:center}
+  .label .ln{font-size:.62rem;height:2em;overflow:hidden}
+  .label .bars{margin:3px 0;line-height:0}
+  .label .cd{font:11px monospace;letter-spacing:1px}
+  .label .pr{font-size:.78rem;font-weight:700;color:var(--brand)}
+  @media print{
+    body>*:not(#labelwin){display:none!important}
+    #labelwin{display:block!important;position:static;background:#fff}
+    #labelwin .sheet{max-width:100%;box-shadow:none} #labelwin .btns{display:none!important}
+  }
+  @media print{
+    body>*:not(#reportwin):not(#voucher){display:none!important}
+    #reportwin.on,#voucher.on{display:block!important;position:static;background:#fff}
+    #reportwin .sheet,#voucher .sheet{max-width:100%;box-shadow:none}
+    #reportwin .btns,#voucher .btns{display:none!important}
+  }
+  @media print{ body>*{display:none!important} #receipt{display:block!important;position:static;background:#fff}
+                #receipt .sheet{box-shadow:none;max-width:100%} #rcx,#rcprint{display:none!important} }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">℞</span>
+    <div><b id="shopname">PHARMA</b><span class="clock" id="clock"></span></div>
+  </div>
+  <span class="clock" id="whoami"></span>
+  <button id="lockbtn" class="ghost">قفل</button>
+</header>
+
+<!-- ===== الرئيسية ===== -->
+<div id="loadwarn" style="display:none;background:#7f1d1d;color:#fff;padding:12px 14px;font-size:.9rem;text-align:center">
+  لم تُحمَّل قاعدة البيانات — افتح التطبيق بمتصفح كروم أو من رابطه، لا بعارض HTML.
+</div>
+<div class="page on" id="pg-home"><div class="wrap">
+  <div class="searchbox">
+    <input id="q" autocomplete="off" placeholder="ابحث بالاسم أو المادة العلمية أو الشركة أو الباركود…">
+    <div class="sug" id="sug"></div>
+  </div>
+  <div class="chips">
+    <span class="chip on" data-k="all">الكل</span>
+    <span class="chip" data-k="مخزون">مخزون</span>
+    <span class="chip" data-k="جديد">جديد</span>
+    <span class="chip" data-k="avail">المتوفر فقط</span>
+  </div>
+  <div class="btns">
+    <button class="main" id="scan">مسح باركود</button>
+    <button id="shot">باركود من صورة</button>
+    <button id="ocrbtn" class="dark">قراءة العلاج</button>
+  </div>
+  <p class="muted" id="camhint" style="margin-top:8px"></p>
+  <p class="muted" id="nores" style="display:none;margin-top:10px">لا يوجد صنف مطابق.</p>
+
+  <div class="card" id="card">
+    <div class="nm" id="c-name"></div>
+    <div class="sci" id="c-sci"></div>
+    <div class="meta" id="c-meta"></div>
+    <div class="big"><span id="c-price"></span><em>سعر البيع</em></div>
+    <div class="kv" id="c-kv"></div>
+    <div class="flag" id="c-flag"></div>
+    <div class="btns">
+      <button class="main" id="addcart">إضافة للفاتورة</button>
+      <button id="editItem">تعديل</button>
+      <button id="aisci">المادة الفعالة (AI)</button>
+      <button id="labelbtn">طباعة ملصق</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h4>إدخال البيانات من ملف</h4>
+    <p class="muted">قائمة المذخر: يُقرأ منها اسم الدواء وسعر الشراء وتاريخ الانتهاء والكمية، ويُسجَّل اسم المذخر.</p>
+    <div class="btns">
+      <button class="main" id="imp-pdf">⇧ PDF</button>
+      <button id="imp-xls">⇧ Excel</button>
+      <button id="imp-doc">⇧ Word</button>
+      <button id="imp-img">⇧ صورة</button>
+    </div>
+    <p class="muted" id="imp-note" style="margin-top:8px"></p>
+  </div>
+
+  <div class="cards" style="margin-top:14px">
+    <div class="kpi g"><i>مبيعات اليوم</i><b id="k-sales">0</b><small id="k-salesn">لا حركة بعد</small></div>
+    <div class="kpi"><i>عدد المواد</i><b id="k-items">0</b><small id="k-avail"></small></div>
+    <div class="kpi o"><i>تحتاج إعادة طلب</i><b id="k-low">0</b><small>دون الحد الأدنى</small></div>
+    <div class="kpi r"><i>قريبة الانتهاء</i><b id="k-exp">0</b><small>خلال ٩٠ يوماً</small></div>
+  </div>
+
+  <div class="panel">
+    <h4>حركة المبيعات — آخر ٧ أيام</h4>
+    <div class="bars" id="chart"></div>
+    <p class="muted" style="margin-top:22px" id="chartsum"></p>
+  </div>
+
+  <div class="panel">
+    <h4>الأكثر مبيعاً</h4>
+    <div class="lst" id="topsell"><p class="muted">لا توجد مبيعات بعد.</p></div>
+  </div>
+
+  <div class="panel">
+    <h4>المساعد الدوائي</h4>
+    <div class="field"><input id="aiq" placeholder="مثال: بدائل هذا الدواء، الجرعة، التداخلات"></div>
+    <div class="btns"><button class="main" id="aiask">اسأل</button><button id="aibatch">تعبئة المواد الفعالة</button></div>
+    <div class="out" id="aiout"></div>
+    <p class="muted" style="margin-top:8px">إجابات استرشادية لا تغني عن المصادر الدوائية المعتمدة.</p>
+  </div>
+</div></div>
+
+<!-- ===== بيع ===== -->
+<div class="page" id="pg-sale">
+  <div class="posbar">
+    <button class="main" id="scansale">▥</button>
+    <input id="psearch" autocomplete="off" placeholder="امسح الباركود أو ابحث…">
+    <button id="tickets">الفواتير <span class="badge" id="heldn">0</span></button>
+    <button id="cashier">كاشير</button>
+    <button id="newitem2">＋ مادة</button>
+    <div class="psug" id="psug"></div>
+  </div>
+  <div class="favs" id="favs"></div>
+  <div class="pos-h"><span class="c1">المنتج</span><span class="c2">السعر</span><span class="c3">الكمية</span><span class="c4">الإجمالي</span></div>
+  <div id="cart"></div>
+  <div class="posfoot">
+    <div class="pf-line"><span>المجموع الفرعي</span><b id="subtotal">0</b></div>
+    <div class="pf-line"><span>الخصم <button id="setdisc" class="mini">تعديل</button></span><b id="discv">0</b></div>
+    <div class="pf-row"><span class="count" id="count">0</span><span class="amount" id="total">0</span></div>
+    <div class="words" id="words"></div>
+    <div class="btns">
+      <button class="main" id="pay">دفع</button>
+      <button id="hold">تعليق</button>
+      <button id="clearcart">إلغاء</button>
+      <button id="shiftbtn">الوردية</button>
+      <button id="exitcash" class="exitcash">خروج</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== المخزون ===== -->
+<div class="page" id="pg-stock"><div class="wrap">
+  <div class="field"><input id="ssearch" placeholder="بحث في المخزون…"></div>
+  <div class="chips">
+    <span class="chip on" data-s="all">الكل</span>
+    <span class="chip" data-s="low">تحت الحد</span>
+    <span class="chip" data-s="zero">نفدت</span>
+    <span class="chip" data-s="nosci">بلا مادة فعالة</span>
+    <span class="chip" data-s="noprice">بلا سعر</span>
+    <span class="chip" data-s="nocost">بلا كلفة</span>
+    <span class="chip" data-s="noexp">بلا تاريخ</span>
+    <span class="chip" data-s="pricechg">تغيّر سعرها</span>
+    <span class="chip" data-s="drug">أدوية</span>
+    <span class="chip" data-s="nondrug">مستلزمات وتجميل</span>
+    <span class="chip" data-s="fix">يحتاج تصحيح</span>
+  </div>
+  <div class="btns">
+    <button class="main" id="newitem">صنف جديد</button>
+    <button id="pick">استيراد Excel / PDF / Word / صورة</button>
+    <button id="exportcsv">تصدير Excel شامل</button>
+    <button id="roundall">تقريب الأسعار للأعلى</button>
+    <button id="zeroqty">تصفير الكميات</button>
+  </div>
+  <input type="file" id="file" accept=".pdf,.xlsx,.xls,.csv,.docx,.doc,image/*" multiple>
+  <div class="panel" id="imsg" style="display:none"></div>
+  <div class="panel" id="prev" style="display:none"></div>
+  <div class="btns"><button class="main" id="doimport" style="display:none">تأكيد الاستيراد</button></div>
+  <p class="muted" id="scount" style="margin-top:12px"></p>
+  <table class="tbl"><thead><tr><th>الصنف</th><th>الكمية</th><th>البيع</th><th>الكلفة</th></tr></thead>
+    <tbody id="stockbody"></tbody></table>
+  <div class="btns"><button id="more">عرض المزيد</button></div>
+  <div class="panel"><h4>المذاخر وسجل المشتريات</h4><div id="purch"></div></div>
+  <div class="panel"><h4>العملاء والديون — الإجمالي <span id="custtotal">0</span></h4><div id="custlist"></div></div>
+
+  <div class="panel"><h4>المخازن والنقل المخزني</h4>
+    <div class="grid2">
+      <div class="field"><label>المخزن الحالي</label><select id="whsel"></select></div>
+      <div class="btns" style="margin-top:22px">
+        <button id="whadd">مخزن جديد</button>
+        <button id="whmove">نقل صنف</button>
+      </div>
+    </div>
+    <div class="lst" id="whlist" style="margin-top:8px"></div>
+    <p class="muted">افتح الصنف من شاشة البحث ثم اضغط «نقل صنف».</p>
+  </div>
+
+  <div class="panel"><h4>الأقساط والمتأخرين</h4>
+    <div class="lst">
+      <div class="row"><span>متأخرات</span><b class="warn" id="planlate">0</b></div>
+      <div class="row"><span>مستحق قادم</span><b id="plandue">0</b></div>
+    </div>
+    <div class="btns"><button class="main" id="planadd">خطة أقساط جديدة</button></div>
+    <div id="planlist" style="margin-top:8px"></div>
+  </div>
+</div></div>
+
+<!-- ===== الديون ===== -->
+<div class="page" id="pg-debt"><div class="wrap">
+  <div class="cards">
+    <div class="kpi r"><i>إجمالي الديون</i><b id="d-total">0</b><small id="d-count">0 مدين</small></div>
+    <div class="kpi o"><i>متأخر أكثر من ٣٠ يوماً</i><b id="d-late">0</b><small>يستحق المتابعة</small></div>
+    <div class="kpi g"><i>محصّل اليوم</i><b id="d-today">0</b><small id="d-todayn">لا تحصيل بعد</small></div>
+    <div class="kpi"><i>أكبر مدين</i><b id="d-top">—</b><small id="d-topv"></small></div>
+  </div>
+  <div class="field"><input id="dsearch" placeholder="ابحث باسم الزبون أو رقمه…"></div>
+  <div class="chips">
+    <span class="chip on" data-d="owe">عليهم دين</span>
+    <span class="chip" data-d="late">متأخرون</span>
+    <span class="chip" data-d="all">الكل</span>
+  </div>
+  <div class="btns">
+    <button class="main" id="dadd">تسجيل دين جديد</button>
+    <button id="dexport">تصدير Excel</button>
+    <button id="dpdf">تقرير PDF</button>
+  </div>
+  <div id="dlist" style="margin-top:12px"></div>
+</div></div>
+
+<!-- ===== دليل الأسعار ===== -->
+<div class="page" id="pg-guide"><div class="wrap">
+  <div class="field"><input id="gsearch" placeholder="ابحث في دليل الأسعار الرسمي…"></div>
+  <p class="muted" id="gcount"></p>
+  <div id="glist"></div>
+</div></div>
+
+<!-- ===== تنبيهات ===== -->
+<div class="page" id="pg-alerts"><div class="wrap"><div id="alerts"></div></div></div>
+
+<!-- ===== إعدادات ===== -->
+<div class="page" id="pg-cfg"><div class="wrap">
+  <h3>الإعدادات</h3>
+  <div class="grid2">
+    <div class="field"><label>اسم الصيدلية</label><input id="cfg-shop"></div>
+    <div class="field"><label>العملة</label><input id="cfg-cur"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>هامش الربح الافتراضي %</label><input id="cfg-margin" inputmode="numeric"></div>
+    <div class="field"><label>تنبيه الانتهاء (يوم)</label><input id="cfg-expdays" inputmode="numeric"></div>
+  </div>
+  <div class="field"><label>خطوة التقريب للأعلى (دينار)</label>
+    <select id="cfg-upstep">
+      <option value="250">٢٥٠ — ٢٦٥٠ تصبح ٢٧٥٠</option>
+      <option value="500">٥٠٠ — ٢٦٥٠ تصبح ٣٠٠٠</option>
+      <option value="1000">١٠٠٠ — ٢٦٥٠ تصبح ٣٠٠٠</option>
+      <option value="100">١٠٠</option>
+    </select>
+  </div>
+  <div class="field"><label>دقة قراءة الباركود</label>
+    <select id="cfg-scan">
+      <option value="balanced">متوازن — تأكيدان (موصى به)</option>
+      <option value="fast">سريع — تأكيد واحد</option>
+      <option value="strict">دقيق — ثلاثة تأكيدات</option>
+    </select>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>التقريب لأقرب (0 = بلا)</label><input id="cfg-round" inputmode="numeric" placeholder="250"></div>
+    <div class="field" style="display:flex;align-items:center;gap:8px;margin-top:22px">
+      <input type="checkbox" id="cfg-hidecost" style="width:auto">
+      <label for="cfg-hidecost" style="margin:0">إخفاء سعر الكلفة</label>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>هامش أعلى الشاشة (بكسل)</label><input id="cfg-safet" inputmode="numeric"></div>
+    <div class="field"><label>هامش أسفل الشاشة (بكسل)</label><input id="cfg-safeb" inputmode="numeric"></div>
+  </div>
+  <p class="muted">إن كان شريط أزرار النظام يغطي أزرار التطبيق، ارفع الهامش السفلي إلى ٢٤ أو ٤٨.</p>
+  <div class="grid2">
+    <div class="field"><label>رمز القفل PIN (اتركه فارغاً لتعطيله)</label><input id="cfg-pin" inputmode="numeric"></div>
+    <div class="field"><label>قفل تلقائي بعد (دقيقة، 0 = بلا)</label><input id="cfg-lockmin" inputmode="numeric"></div>
+  </div>
+  <div class="field"><label>مفتاح Anthropic API</label><input id="cfg-key" placeholder="sk-ant-..."></div>
+  <div class="field"><label>الموديل</label><input id="cfg-model"></div>
+  <div class="field" style="display:flex;align-items:center;gap:8px">
+    <input type="checkbox" id="cfg-hw" style="width:auto" checked>
+    <label for="cfg-hw" style="margin:0">قارئ باركود خارجي (USB أو بلوتوث) — يعمل ككيبورد</label>
+  </div>
+  <div class="btns"><button class="main" id="savecfg">حفظ</button>
+    <button id="diag">فحص القارئ والكاميرا</button>
+    <button id="btconnect">ربط طابعة بلوتوث</button></div>
+  <p class="muted">الطابعة الحرارية ٥٨ ملم عبر بلوتوث: اربطها مرة، وعند الطباعة يُرسل الوصل صورةً لتظهر العربية سليمة،
+  وتُعلَّم الفاتورة «طُبعت» في السجل.</p>
+  <p class="muted">اربط القارئ بالهاتف عبر البلوتوث أو منفذ USB-OTG، ثم امسح أي عبوة —
+  يُضاف الصنف إلى الفاتورة مباشرة دون لمس الشاشة. اضغط «فحص القارئ» لرؤية آخر رمز التقطه.</p>
+  <h3>الموظفون والصلاحيات</h3>
+  <div class="lst" id="userlist"></div>
+  <div class="btns"><button id="useradd">إضافة موظف</button></div>
+  <p class="muted">مدير: كل شيء · صيدلاني: بلا إعدادات · كاشير: بلا كلفة ولا مخزون ولا مرتجعات.
+  يدخل كل موظف برمزه من شاشة القفل.</p>
+
+  <h3>المزامنة بين الأجهزة</h3>
+  <div class="field"><label>رابط المزامنة (JSON PUT/GET)</label><input id="cfg-syncurl" placeholder="https://api.jsonbin.io/v3/b/XXXX"></div>
+  <div class="field"><label>مفتاح الوصول (اختياري)</label><input id="cfg-synckey" type="password"></div>
+  <div class="btns"><button class="main" id="syncbtn">مزامنة الآن</button></div>
+  <p class="muted" id="syncmsg"></p>
+
+  <h3>النسخ الاحتياطية</h3>
+  <div class="btns">
+    <button id="exportall">تصدير Excel شامل</button>
+    <button id="backup">تصدير نسخة</button>
+    <button id="restorebtn">استعادة</button>
+    <button id="wipe" class="warn">إعادة ضبط</button>
+  </div>
+  <input type="file" id="restore" accept=".json">
+  <p class="muted" style="margin-top:12px" id="seedinfo"></p>
+</div></div>
+
+<!-- نافذة الدفع -->
+<div class="modal" id="paywin"><div class="sheet">
+  <h3>الدفع</h3>
+  <div class="due"><span>المطلوب</span><b id="paydue">0</b></div>
+  <div class="chips" id="quickcash"></div>
+  <div class="field"><label>المدفوع</label><input id="tendered" inputmode="numeric" placeholder="0"></div>
+  <div class="keypad" id="keypad"></div>
+  <div class="due change"><span>الباقي</span><b id="change">0</b></div>
+  <div class="chips" id="methods">
+    <span class="chip on" data-m="نقد">نقد</span>
+    <span class="chip" data-m="بطاقة">بطاقة</span>
+    <span class="chip" data-m="دين">دين</span>
+  </div>
+  <div class="field"><label>اسم الزبون (اختياري)</label><input id="cust"></div>
+  <div class="btns"><button class="main" id="dopay">إتمام البيع</button><button id="paycancel">رجوع</button></div>
+</div></div>
+
+<!-- الفواتير -->
+<div class="modal" id="ticketwin"><div class="sheet">
+  <h3>الفواتير</h3>
+  <div class="chips" id="tabs2">
+    <span class="chip on" data-v="held">معلّقة</span>
+    <span class="chip" data-v="done">سجل المبيعات</span>
+  </div>
+  <div id="ticketlist"></div>
+  <div class="btns"><button id="ticketx">إغلاق</button></div>
+</div></div>
+
+<!-- تقفيل الوردية -->
+<div class="modal" id="shiftwin"><div class="sheet">
+  <h3>ملخّص الوردية</h3>
+  <div id="shiftbody"></div>
+  <div class="btns"><button class="main" id="shiftprint">طباعة</button><button id="shiftx">إغلاق</button></div>
+</div></div>
+
+<!-- محرر الصنف -->
+<div class="modal" id="editwin"><div class="sheet">
+  <h3 id="edittitle">تعديل صنف</h3>
+  <div class="field"><label>الاسم</label><input id="e-n"></div>
+  <div class="grid2">
+    <div class="field"><label>الباركود</label><input id="e-b" inputmode="numeric"></div>
+    <div class="field"><label>الشركة</label><input id="e-c"></div>
+  </div>
+  <div class="field"><label>الاسم العلمي</label><input id="e-sc"></div>
+  <div class="grid2">
+    <div class="field"><label>الكلفة</label><input id="e-k" inputmode="numeric"></div>
+    <div class="field"><label>سعر البيع</label><input id="e-p" inputmode="numeric"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>الكمية</label><input id="e-q" inputmode="numeric"></div>
+    <div class="field"><label>حد إعادة الطلب</label><input id="e-min" inputmode="numeric"></div>
+  </div>
+  <div class="field"><label>تاريخ الانتهاء (يوم/شهر/سنة)</label><input id="e-e" placeholder="01/12/2028"></div>
+  <div class="field"><label>باركود إضافي (افصل بفاصلة)</label><input id="e-b2" inputmode="numeric"></div>
+  <div class="grid2">
+    <div class="field"><label>الوحدة الثانية (شريط/حبة)</label><input id="e-u2" placeholder="شريط"></div>
+    <div class="field"><label>عددها في العلبة</label><input id="e-u2q" inputmode="numeric" placeholder="10"></div>
+  </div>
+  <div class="field"><label>سعر بيع الوحدة الثانية</label><input id="e-u2p" inputmode="numeric"></div>
+  <div id="e-batches" style="margin-top:10px"></div>
+  <p class="muted" id="e-hint"></p>
+  <p class="muted">اختصارات: F2 بيع · F3 إلغاء · F5 بحث · F6 تعليق · F8 دفع · F9 الوردية</p>
+  <div class="btns"><button class="main" id="esave">حفظ</button><button id="esuggest">اقتراح سعر</button>
+  <button id="eguide">سعر الدليل</button><button id="eround">تقريب للأعلى</button><button id="ecancel">إلغاء</button></div>
+</div></div>
+
+<div class="modal" id="labelwin"><div class="sheet">
+  <h3>ملصقات الباركود</h3>
+  <div id="labels" class="labels"></div>
+  <div class="btns"><button class="main" id="labelprint">طباعة</button><button data-close="labelwin" onclick="this.closest('.modal').classList.remove('on')">إغلاق</button></div>
+</div></div>
+
+<div class="modal" id="reportwin"><div class="sheet" style="max-width:640px">
+  <div id="rep"></div>
+  <div class="btns"><button class="main" id="repprint">طباعة / حفظ PDF</button>
+  <button onclick="this.closest('.modal').classList.remove('on')">إغلاق</button></div>
+</div></div>
+
+<div class="modal" id="voucher"><div class="sheet">
+  <div id="vc"></div>
+  <div class="btns"><button class="main" id="vcprint">طباعة</button>
+  <button id="vcshare">إرسال واتساب</button>
+  <button onclick="this.closest('.modal').classList.remove('on')">إغلاق</button></div>
+</div></div>
+
+<div class="modal" id="receipt"><div class="sheet">
+  <div id="rc"></div>
+  <div class="btns"><button class="main" id="rcprint">طباعة</button><button id="rcx">إغلاق</button></div>
+</div></div>
+
+<div class="modal" id="lockwin"><div class="sheet" style="max-width:330px;text-align:center">
+  <div class="logo big">℞</div>
+  <h3 style="text-align:center">PHARMA</h3>
+  <p class="muted">أدخل رمز الدخول</p>
+  <input id="lockpin" type="password" inputmode="numeric" style="text-align:center;font-size:1.3rem;letter-spacing:5px">
+  <p class="warn" id="lockmsg" style="font-size:.8rem;min-height:1em"></p>
+  <div class="btns"><button class="main" id="dounlock">دخول</button></div>
+</div></div>
+
+<div class="scan" id="cam">
+  <button class="close" id="camx">إغلاق</button>
+  <div class="viewport"><video id="vid" playsinline muted></video><div class="guide"></div></div>
+  <p id="camtxt"></p>
+  <button id="torch" style="display:none">تشغيل الضوء</button>
+</div>
+
+<div class="nav">
+  <button data-t="home" class="on">الرئيسية</button>
+  <button data-t="sale">بيع</button>
+  <button data-t="stock">المخزون</button>
+  <button data-t="debt">الديون</button>
+  <button data-t="guide">الأسعار</button>
+  <button data-t="alerts">تنبيهات</button>
+  <button data-t="cfg">إعدادات</button>
+</div>
+
+<input type="file" id="photo" accept="image/*" capture="environment">
+<div id="toast"></div>
+<script src="vendor/zxing.min.js"></script>
+<script src="vendor/fflate.min.js"></script>
+<script src="data/seed.js"></script>
+<script src="data/prices.js"></script>
+<script src="app.js"></script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}</script>
+</body>
+</html>
